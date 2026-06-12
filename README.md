@@ -38,20 +38,6 @@ make CC=gcc test
 make CC=gcc install
 ```
 
-`make install` adapts to where it runs: a POSIX system gets
-`$(PREFIX)/bin` (honoring `DESTDIR` for packaging), an MSYS2/Git-Bash
-shell gets its own `/usr/local/bin`, and native `mingw32-make` under
-cmd.exe copies to `%LOCALAPPDATA%\Programs\khatm` (per-user, no admin  
-add that folder to PATH once). `make uninstall` undoes it.
-
-Everything OS-specific lives in `src/plat.c` (POSIX termios/poll on one
-side, the Win32 console API on the other); the rest of the code is shared.
-The TUI needs a console that renders ANSI escapes   Windows Terminal or
-any Windows 10+ conhost is fine. On an older console the TUI won't start,
-but every CLI command still works (without color). Data lives in
-`%USERPROFILE%\.khatm` on Windows, `~/.khatm` elsewhere; `KHATM_DIR`
-overrides it everywhere.
-
 ## Quick start
 
 ```sh
@@ -65,6 +51,8 @@ opens a book or starts a timed session, `p` starts a pomodoro session
 for a chapter or book by a date, `d` marks a chapter done or drops a goal,
 `n`/`a` create a book / add a chapter without leaving the TUI, `?` help,
 `q` quit. `NO_COLOR` is honored.
+
+I would personally recommend to use the TUI since writing everything manually in the terminal is hell...
 
 Every command also works headless, for scripts and quick one-liners:
 
