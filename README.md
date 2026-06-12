@@ -1,13 +1,9 @@
 # khatm (ختم)
 
-A build system for your studying. Portable C99 (Linux, macOS, Windows),
-single binary, zero runtime dependencies.
-
-Your syllabus is source code, goals are build targets, and `khatm` is `make`:
-it always knows what you should study next, whether you're on pace, and it
-pays out the dopamine at the moments that matter — setting a goal, keeping a
-goal, and sealing a chapter. See [IDEA.md](IDEA.md) for the full design and
-prior-art audit.
+A little terminal app for tracking your reading/studying. You describe each
+book as a markdown checklist, and khatm keeps track of what's done, what's
+next, how fast you're actually going, and whether you're on track for any
+deadlines you've set yourself.
 
 ## Build
 
@@ -16,6 +12,7 @@ Linux and macOS:
 ```sh
 make            # produces ./khatm
 make test       # end-to-end smoke suite
+make install    # to /usr/local/bin (PREFIX=~/.local for per-user)
 ```
 
 Windows, native (MSYS2 UCRT64 or any MinGW-w64 gcc):
@@ -23,14 +20,21 @@ Windows, native (MSYS2 UCRT64 or any MinGW-w64 gcc):
 ```sh
 make CC=gcc     # produces ./khatm.exe
 make CC=gcc test
+make CC=gcc install
 ```
+
+`make install` adapts to where it runs: a POSIX system gets
+`$(PREFIX)/bin` (honoring `DESTDIR` for packaging), an MSYS2/Git-Bash
+shell gets its own `/usr/local/bin`, and native `mingw32-make` under
+cmd.exe copies to `%LOCALAPPDATA%\Programs\khatm` (per-user, no admin —
+add that folder to PATH once). `make uninstall` undoes it.
 
 Everything OS-specific lives in `src/plat.c` (POSIX termios/poll on one
 side, the Win32 console API on the other); the rest of the code is shared.
 The TUI needs a console that renders ANSI escapes — Windows Terminal or
-any Windows 10+ conhost qualifies. On an older console the TUI declines
-to start, but every CLI command still works (without color). Data lives
-in `%USERPROFILE%\.khatm` on Windows, `~/.khatm` elsewhere; `KHATM_DIR`
+any Windows 10+ conhost is fine. On an older console the TUI won't start,
+but every CLI command still works (without color). Data lives in
+`%USERPROFILE%\.khatm` on Windows, `~/.khatm` elsewhere; `KHATM_DIR`
 overrides it everywhere.
 
 ## Quick start
@@ -39,33 +43,38 @@ overrides it everywhere.
 ./khatm                         # the TUI (default in a terminal)
 ```
 
-First run offers to set everything up with a sample syllabus. Inside:
+First run offers to set things up with a sample syllabus. Inside:
 `1-4` switch views (home · books · goals · stats), `↑↓/jk` move, `enter`
-opens a book or starts a timed session (live block-digit clock), `g`
-promises a chapter or book by a date — priced before you commit — `d`
-seals a chapter (the ceremony) or drops a goal, `?` help, `q` quit.
-The palette is a muted manuscript theme (gold seals, teal ink, sage);
-`NO_COLOR` is honored.
+opens a book or starts a timed session, `p` starts a pomodoro session
+(25 min focus + 5 min breaks; only focus time is logged), `g` sets a goal
+for a chapter or book by a date, `d` marks a chapter done or drops a goal,
+`n`/`a` create a book / add a chapter without leaving the TUI, `?` help,
+`q` quit. `NO_COLOR` is honored.
 
 Every command also works headless, for scripts and quick one-liners:
 
 ```sh
 ./khatm init                    # data dir (default ~/.khatm, or $KHATM_DIR)
-$EDITOR ~/.khatm/books/ostep.md # write a syllabus (sample provided)
-./khatm next                    # what to study, and why
+$EDITOR ~/.khatm/books/ostep.md # write a syllabus (sample provided)…
+./khatm book new ostep "OSTEP"  # …or let khatm write it for you
+./khatm book add ostep "Processes" --est 18p   # append a chapter
+./khatm next                    # suggests what to study, and why
 ./khatm study ostep/1           # timed session (or: khatm log ostep/1 45m --pages 12)
-./khatm goal ostep/3 --by friday# a promise, priced before you make it
-./khatm done ostep/1            # seal the chapter (the ceremony)
-./khatm status                  # today, streak, promises, kept-rate
+./khatm study ostep/1 --pomo 25/5   # pomodoro: breaks aren't logged
+./khatm goal ostep/3 --by friday# set a deadline for yourself
+./khatm done ostep/1            # mark the chapter done
+./khatm status                  # today, streak, goals, kept-rate
 ./khatm pace ostep              # burndown, ETA, required pace
-./khatm shelf                   # every book you have ever sealed
+./khatm shelf                   # finished books
 ./khatm graph                   # session heatmap
-./khatm doctor                  # cycles, stale promises, estimate bias
+./khatm doctor                  # cycles, stale goals, estimate bias
 ```
 
 ## Syllabus format
 
-One markdown file per book in `<root>/books/`. khatm never rewrites it.
+One markdown file per book in `<root>/books/`. khatm never rewrites what
+you wrote — its own `book new`/`book add`/`book section` commands only
+create files or append lines, so hand-editing stays safe.
 
 ```markdown
 # Operating Systems: Three Easy Pieces
@@ -80,18 +89,20 @@ meta: deadline=2026-08-30 pages=650
 - [ ] Thread API ~10p [needs: 1, otherbook/3]
 ```
 
-- `~18p` / `~2h` / `~90m` — optional estimates (khatm reports your bias).
+- `~18p` / `~2h` / `~90m` — optional estimates (khatm reports how far off
+  your estimates tend to be).
 - `[needs: ...]` — prerequisites: a chapter number, a section title, a title
   substring, or `book/ref` across books. Sections pass their needs to every
   chapter inside.
 - Checking `[x]` by hand counts as done; `khatm done` is better (it's dated).
 
 All state khatm writes is one append-only, greppable log: `<root>/log.txt`.
-State is a pure fold of (syllabi, log, clock) — back it up or sync it with git.
+State is rebuilt from (syllabi, log, clock) on every load — back it up or
+sync it with git.
 
-## Integrating khatm into other programs
+## Using khatm from other programs
 
-khatm doubles as a backend (api version 1). The pattern for a GUI:
+khatm can act as a backend (api version 1). The pattern for a GUI:
 render from `dump`, call mutations with `--json`, re-`dump`.
 
 ```sh
@@ -123,14 +134,15 @@ folds them on next load), and the syllabi in `<root>/books/*.md` can be
 generated by other tools. `done`/`goal`/`drop` are idempotent or safely
 re-runnable, and `dump` is cheap enough to call after every mutation.
 
-## The reward rules
+## Progress and goals
 
-Every reward is triggered by a real study event; there is nothing to grind.
+A few small things khatm does to make progress visible:
 
-- **Seals** — finishing a chapter stamps it, with real numbers (actual vs.
-  estimate, what it unblocked). Finishing a whole book is a **khatma** and
-  puts its spine on your shelf, forever.
-- **Your word, kept** — the % of self-set goals met on time, shown whenever
-  you set a new one. Goals are priced (required pages/day vs. your actual
-  4-week pace) *before* you promise. Dropping a goal never counts against you.
-- **Streaks, heatmap, records** — announced only when the real numbers are new.
+- Finishing a chapter records the actual time vs. your estimate and what it
+  unblocked. Finishing a whole book is a **khatma** and adds it to your shelf.
+- Goals show your kept-rate (% of self-set deadlines met on time), and before
+  you set one, khatm shows the required pages/day next to your actual 4-week
+  pace — so you know what you're signing up for. Dropping a goal doesn't
+  count against you.
+- Streaks, a session heatmap, and personal records, mentioned only when
+  they actually change.

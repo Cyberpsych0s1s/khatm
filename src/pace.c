@@ -4,11 +4,47 @@
 
 static Chapter *CH(State *st, Ref r) { return &st->books[r.book].chs[r.ch]; }
 
+/* Mean(actual / estimate) over a book's sealed chapters, pages or minutes.
+ * 0 when there are fewer than 2 samples — too little to read a bias from. */
+static double book_bias(State *st, int b, int want_pages, int *n_out) {
+    Book *bk = &st->books[b];
+    double sum = 0;
+    int n = 0;
+    for (int c = 0; c < bk->nchs; c++) {
+        Chapter *ch = &bk->chs[c];
+        if (!ch->done_at) continue;
+        double est = want_pages ? ch->est_pages : ch->est_min;
+        double act = want_pages ? ch->pages : ch->minutes;
+        if (est > 0 && act > 0) { sum += act / est; n++; }
+    }
+    if (n_out) *n_out = n;
+    return n >= 2 ? sum / n : 0;
+}
+
+double book_bias_min(State *st, int b, int *n_out) {
+    return book_bias(st, b, 0, n_out);
+}
+
+/* Calibration factor applied to a book's estimates when forecasting.
+ * Clamped so sparse or odd logs can't distort weights without bound. */
+static double calib(State *st, int b, int want_pages) {
+    double f = book_bias(st, b, want_pages, NULL);
+    if (f <= 0) return 1.0;
+    if (f < 0.4) f = 0.4;
+    if (f > 2.5) f = 2.5;
+    return f;
+}
+
+double book_calib_pages(State *st, int b) { return calib(st, b, 1); }
+double book_calib_min(State *st, int b)   { return calib(st, b, 0); }
+
 double ch_weight(State *st, Ref r) {
     Book *bk = &st->books[r.book];
     Chapter *ch = CH(st, r);
-    if (ch->est_pages > 0) return ch->est_pages;
-    if (ch->est_min > 0) return ch->est_min / 3.0;
+    if (ch->est_pages > 0)
+        return ch->est_pages * book_calib_pages(st, r.book);
+    if (ch->est_min > 0)
+        return ch->est_min / 3.0 * book_calib_min(st, r.book);
     if (bk->total_pages > 0 && bk->nchs > 0)
         return bk->total_pages / bk->nchs;
     return 10.0;

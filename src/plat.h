@@ -24,5 +24,10 @@ void plat_out(const char *buf, size_t n);
 
 int  plat_mkdir(const char *path);    /* 0 if created or exists      */
 const char *plat_home(void);          /* never NULL                  */
+int  plat_stdin_tty(void);            /* may we ask a question?      */
+
+/* Cooked-mode wait used by the CLI pomodoro: block until Enter is
+ * pressed or the timeout elapses. 1 = Enter, 0 = timeout, -1 = EOF. */
+int  plat_wait_enter(int timeout_ms);
 
 #endif

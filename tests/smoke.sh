@@ -18,7 +18,8 @@ run() { # run <desc> <expected-substring> -- <args...>
     local desc="$1" want="$2"; shift 2
     [ "$1" = "--" ] && shift
     local out
-    out="$("$BIN" "$@" 2>&1)"
+    # stdin from /dev/null: interactive confirmations must never block here
+    out="$("$BIN" "$@" </dev/null 2>&1)"
     if printf '%s' "$out" | grep -qF -- "$want"; then
         echo "ok   $desc"
     else
@@ -40,14 +41,19 @@ run "negative pages rejected"  '"ok":false'            -- log knr/1 10m --pages 
 run "bad pages rejected"       "bad pages"             -- log knr/1 10m --pages nope
 run "unknown log flag rejected" "unknown option"        -- log knr/1 10m --wat
 run "fuzzy title resolves"     "logged 30 min"         -- log tutorial 30m --pages 12
+run "book+number resolves"     "logged 20 min"         -- log knr2 20m
+run "book prefix resolves"     "remaining"             -- pace kn
 run "done seals + keeps goal"  "goal kept"             -- done knr/1
 run "done is idempotent"       "already sealed"        -- done knr/1
 run "kept rate shows"          "your word, kept: 100%" -- goal
+run "goal prices prerequisites" "unsealed prerequisites" -- goal knr/8 --by +10d
+run "status totals promises"   "all promises"          -- status
 run "status renders"           "study now"             -- status
 run "pace forecasts"           "remaining"             -- pace knr
 run "graph renders"            "minutes/day"           -- graph 4
 run "shelf starts empty-ish"   "your shelf"            -- shelf
 run "doctor notices no deadline" "no deadline"         -- doctor
+run "doctor flags at-risk promise" "at-risk promise"   -- doctor
 cat > "$DIR/books/partial.md" <<'MD'
 # Partial Needs
 
@@ -56,8 +62,35 @@ cat > "$DIR/books/partial.md" <<'MD'
 MD
 run "doctor catches partial bad need" "unresolved needs \"Missing\"" -- doctor
 rm -f "$DIR/books/partial.md"
-"$BIN" goal knr/2 --by +5d >/dev/null
+"$BIN" goal knr/2 --by +5d </dev/null >/dev/null
 run "drop is judgment-free"    "never counts"          -- goal --drop knr/2
+
+# deadlines propagate backwards through needs edges
+cat > "$DIR/books/dep.md" <<'MD'
+# Dep Chain
+
+- [ ] First
+- [ ] Second [needs: 1]
+MD
+"$BIN" goal dep/2 --by +2d </dev/null >/dev/null 2>&1
+run "deadline propagates to prereq" "blocks work due"  -- next
+"$BIN" goal --drop dep/2 </dev/null >/dev/null 2>&1
+rm -f "$DIR/books/dep.md"
+
+# book creation without an editor
+run "book new creates a syllabus" "now add chapters"    -- book new algo "Algorithms Illuminated" --pages 200
+run "book add appends a chapter"  "algo/1"              -- book add algo "Sorting" --est 12p
+run "book section opens"          "section \"Graphs\""  -- book section algo "Graphs"
+run "book add with needs"         "algo/2"              -- book add algo "BFS" --needs 1
+run "new book is studyable"       "logged 5 min"        -- log algo1 5m
+run "dup book id rejected"        "already exists"      -- book new knr whatever
+run "weird book id rejected"      "book id"             -- book new "we!rd" x
+run "bad estimate rejected"       "bad estimate"        -- book add algo "Z" --est nope
+run "book add survives reload"    "Sorting"             -- books --json
+
+# pomodoro (stdin is /dev/null: ends immediately, logs the 1-min floor)
+run "pomodoro logs focus time"    "logged 1 min"        -- study algo/1 --pomo 1/1
+run "bad pomodoro spec rejected"  "pomodoro spec"       -- study algo/1 --pomo 0/0
 
 # blocked chapters stay blocked: 4 needs section Basics (1-3)
 out="$("$BIN" next 2>&1)"

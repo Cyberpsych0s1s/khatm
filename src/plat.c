@@ -111,6 +111,31 @@ int plat_mkdir(const char *path) {
             (a & FILE_ATTRIBUTE_DIRECTORY)) ? 0 : -1;
 }
 
+int plat_stdin_tty(void) {
+    return _isatty(0);
+}
+
+int plat_wait_enter(int timeout_ms) {
+    /* no console: nothing interactive can arrive — end the session
+     * rather than risk blocking on a pipe forever */
+    if (!_isatty(0)) return -1;
+    HANDLE in = GetStdHandle(STD_INPUT_HANDLE);
+    DWORD start = GetTickCount();
+    for (;;) {
+        DWORD spent = GetTickCount() - start;
+        if (spent >= (DWORD)timeout_ms) return 0;
+        if (WaitForSingleObject(in, (DWORD)timeout_ms - spent)
+            != WAIT_OBJECT_0)
+            return 0;
+        INPUT_RECORD rec;
+        DWORD n = 0;
+        if (!ReadConsoleInputW(in, &rec, 1, &n) || n != 1) return -1;
+        if (rec.EventType == KEY_EVENT && rec.Event.KeyEvent.bKeyDown &&
+            rec.Event.KeyEvent.wVirtualKeyCode == VK_RETURN)
+            return 1;
+    }
+}
+
 const char *plat_home(void) {
     const char *h = getenv("HOME");
     if (!h || !*h) h = getenv("USERPROFILE");
@@ -215,6 +240,19 @@ void plat_out(const char *buf, size_t n) {
 int plat_mkdir(const char *path) {
     if (mkdir(path, 0755) == 0 || errno == EEXIST) return 0;
     return -1;
+}
+
+int plat_stdin_tty(void) {
+    return isatty(0);
+}
+
+int plat_wait_enter(int timeout_ms) {
+    struct pollfd p = { 0, POLLIN, 0 };
+    if (poll(&p, 1, timeout_ms) <= 0) return 0;
+    /* cooked mode: data arrives only once Enter is pressed; drain it */
+    char buf[256];
+    ssize_t got = read(0, buf, sizeof buf);
+    return got > 0 ? 1 : -1;
 }
 
 const char *plat_home(void) {

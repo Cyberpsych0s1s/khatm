@@ -97,6 +97,15 @@ typedef struct State {
 } State;
 
 int  syl_load(State *st);
+/* Syllabus writers (append-only — khatm never rewrites user lines).
+ * They also update in-memory state. 0 ok; -1 with a message in err. */
+int  syl_book_new(State *st, const char *id, const char *title,
+                  double pages, time_t deadline, char *err, size_t errn);
+int  syl_book_add(State *st, const char *id, const char *title,
+                  const char *est, const char *needs,
+                  char *err, size_t errn);
+int  syl_book_section(State *st, const char *id, const char *title,
+                      const char *needs, char *err, size_t errn);
 /* Resolve one raw needs token ("3", "Section", "book/3", "book/Section")
  * relative to book b. Appends resolved chapter refs to ch->needs.
  * Returns 0 ok, -1 unresolved. */
@@ -117,6 +126,15 @@ int  ev_dropgoal(State *st, Ref r);
 
 int  deps_met(State *st, Ref r);
 int  count_unblocks(State *st, Ref r);
+int  plan_total_chs(State *st);
+/* Implied deadline per chapter (one slot per chapter, file order across
+ * books; 0 = none): the earliest of goals covering it, its book deadline,
+ * and deadlines inherited from dependents through needs edges. */
+void plan_implied(State *st, time_t *out);
+/* Pages-equivalent left to complete r — including every unsealed chapter
+ * it transitively needs. r.ch == -1: the whole book. prereq_out (may be
+ * NULL) receives just the prerequisite portion. */
+double plan_goal_work(State *st, Ref r, double *prereq_out);
 /* Best next candidates, sorted. Fills out[] up to max; returns count.
  * reason receives a short human string for out[0..count-1]. */
 typedef struct NextPick { Ref r; double score; char reason[160]; } NextPick;
@@ -124,6 +142,9 @@ int  plan_next(State *st, NextPick *out, int max);
 
 double ch_weight(State *st, Ref r);
 double ch_progress(State *st, Ref r);
+double book_bias_min(State *st, int b, int *n_out);
+double book_calib_pages(State *st, int b);
+double book_calib_min(State *st, int b);
 double book_progress(State *st, int b);
 double velocity_pages(State *st, int b, int days);
 double velocity_min(State *st, int b, int days);
@@ -153,6 +174,7 @@ void ui_shelf(State *st);
 void ui_heatmap(State *st, int weeks);
 
 int cmd_init(State *st, int argc, char **argv);
+int cmd_book(State *st, int argc, char **argv);
 int cmd_books(State *st, int argc, char **argv);
 int cmd_status(State *st, int argc, char **argv);
 int cmd_next(State *st, int argc, char **argv);
@@ -179,5 +201,6 @@ int  api_session_json(State *st, Ref r, double min, double pages,
 int  api_done_json(State *st, Ref r, int already);
 int  api_goal_json(State *st, Ref r, time_t by);
 int  api_drop_json(State *st, Ref r);
+int  api_book_json(const char *event, const char *id, int chapter);
 
 #endif

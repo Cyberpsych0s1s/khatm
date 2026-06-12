@@ -1,3 +1,4 @@
 khatm
 khatm.exe
 src/*.o
+internal/

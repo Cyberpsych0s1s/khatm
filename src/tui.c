@@ -101,6 +101,11 @@ typedef struct UI {
     int sel_book, sel_ch, sel_goal, scroll;
     Ref suggestion; int has_suggestion;
     Ref study; time_t study_start;
+    /* pomodoro: phase 0 = focus, 1 = break; focus_accum counts only
+     * completed focus time — breaks are never logged */
+    int pomo, pomo_w, pomo_b, pomo_phase, pomo_n;
+    time_t phase_start;
+    double focus_accum;
     char toast[200]; time_t toast_until; int toast_color;
     int quit;
 } UI;
@@ -279,9 +284,7 @@ static void d_home(UI *ui) {
         Goal *go = &st->goals[idx[i]];
         int left = days_between(st->now, go->by);
         fmt_date(go->by, d, sizeof d);
-        double work = go->target.ch >= 0
-            ? ch_weight(st, go->target) * (1 - ch_progress(st, go->target))
-            : book_remaining_pages(st, go->target.book);
+        double work = plan_goal_work(st, go->target, NULL);
         int dd = left < 1 ? 1 : left;
         omove(row++, 1);
         op("   %-12s %sby %s%s  %s%2dd left%s   ~%.0f p/day to keep it\033[K",
@@ -430,9 +433,7 @@ static void d_goals(UI *ui) {
         Goal *go = &st->goals[idx[i]];
         int left = days_between(st->now, go->by);
         fmt_date(go->by, d, sizeof d);
-        double work = go->target.ch >= 0
-            ? ch_weight(st, go->target) * (1 - ch_progress(st, go->target))
-            : book_remaining_pages(st, go->target.book);
+        double work = plan_goal_work(st, go->target, NULL);
         int sel = i == ui->sel_goal;
         omove(row++, 1);
         op(" %s%s%s ", fg(P_GOLDHI), sel ? "▌" : " ", TR);
@@ -578,12 +579,45 @@ static void d_bigtime(UI *ui, int row, const char *txt) {
 static void d_study(UI *ui) {
     State *st = ui->st;
     Chapter *ch = CH(st, ui->study);
-    char rb[64];
-    int elapsed = (int)difftime(time(NULL), ui->study_start);
-    int mm = elapsed / 60, ss = elapsed % 60;
-    char t[16];
-    if (mm > 99) snprintf(t, sizeof t, "%d:%02d", mm / 60, mm % 60);
-    else snprintf(t, sizeof t, "%02d:%02d", mm, ss);
+    char rb[64], t[16], info[160];
+    time_t now = time(NULL);
+
+    if (ui->pomo) {
+        /* advance phases that have elapsed (catches missed redraws too);
+         * phase_start steps by whole phase lengths so nothing drifts */
+        for (;;) {
+            int limit = (ui->pomo_phase ? ui->pomo_b : ui->pomo_w) * 60;
+            if (difftime(now, ui->phase_start) < limit) break;
+            if (ui->pomo_phase == 0) ui->focus_accum += limit / 60.0;
+            else ui->pomo_n++;
+            ui->pomo_phase = !ui->pomo_phase;
+            ui->phase_start += limit;
+            op("\a");
+        }
+        int limit = (ui->pomo_phase ? ui->pomo_b : ui->pomo_w) * 60;
+        int left = limit - (int)difftime(now, ui->phase_start);
+        snprintf(t, sizeof t, "%02d:%02d", left / 60, left % 60);
+        double focused = ui->focus_accum +
+            (ui->pomo_phase == 0 ? difftime(now, ui->phase_start) / 60.0 : 0);
+        if (ui->pomo_phase == 0)
+            snprintf(info, sizeof info,
+                     "focus %d of %d/%d · %.0f min focused so far",
+                     ui->pomo_n, ui->pomo_w, ui->pomo_b, focused);
+        else
+            snprintf(info, sizeof info,
+                     "break — stretch · %.0f min focused so far", focused);
+    } else {
+        int elapsed = (int)difftime(now, ui->study_start);
+        int mm = elapsed / 60, ss = elapsed % 60;
+        if (mm > 99) snprintf(t, sizeof t, "%d:%02d", mm / 60, mm % 60);
+        else snprintf(t, sizeof t, "%02d:%02d", mm, ss);
+        double prog = ch_progress(st, ui->study);
+        if (prog > 0 && prog < 1)
+            snprintf(info, sizeof info,
+                     "chapter at %.0f%% before this session", prog * 100);
+        else
+            snprintf(info, sizeof info, "first session on this chapter");
+    }
 
     int row = ui->h / 2 - 6;
     if (row < 6) row = 6;
@@ -598,13 +632,6 @@ static void d_study(UI *ui) {
     d_bigtime(ui, row + 2, t);
 
     omove(row + 8, 1);
-    double prog = ch_progress(st, ui->study);
-    char info[160];
-    if (prog > 0 && prog < 1)
-        snprintf(info, sizeof info, "chapter at %.0f%% before this session",
-                 prog * 100);
-    else
-        snprintf(info, sizeof info, "first session on this chapter");
     pad = (ui->w - dlen(info)) / 2;
     if (pad < 1) pad = 1;
     op("%*s%s%s%s\033[K", pad, "", fg(P_MUT), info, TR);
@@ -634,9 +661,9 @@ static void draw_frame(UI *ui) {
     }
 
     static const char *hints[6] = {
-        "[enter] study   [d] seal   [g] promise   [1-4] views   [?] help   [q] quit",
-        "[↑↓] select   [enter] chapters   [g] promise the book   [q] quit",
-        "[↑↓] select   [enter] study   [d] seal   [g] promise   [esc] back",
+        "[enter] study   [p] pomodoro   [d] seal   [g] promise   [?] help   [q] quit",
+        "[↑↓] select   [enter] chapters   [n] new book   [a] add chapter   [g] promise",
+        "[↑↓] select   [enter] study   [p] pomodoro   [d] seal   [g] promise   [a] add",
         "[↑↓] select   [d] drop promise   [1-4] views   [q] quit",
         "[1-4] views   [q] quit",
         "[enter] finish session   [esc] discard",
@@ -792,9 +819,8 @@ static void act_goal(UI *ui, Ref target) {
     if (!by) { toastf(ui, P_ROSE, "could not read \"%s\" as a date", buf); return; }
     if (by <= st->now) { toastf(ui, P_ROSE, "that day is already gone"); return; }
 
-    double work = target.ch >= 0
-        ? ch_weight(st, target) * (1 - ch_progress(st, target))
-        : book_remaining_pages(st, target.book);
+    double prereq = 0;
+    double work = plan_goal_work(st, target, &prereq);
     int days = days_between(st->now, by);
     if (days < 1) days = 1;
     double need = work / days, vel = velocity_pages(st, -1, 28);
@@ -811,6 +837,9 @@ static void act_goal(UI *ui, Ref target) {
                  need <= vel * 1.5 ? "a stretch" : "steep");
     else
         snprintf(lines[n++], 160, "needs ~%.0f p/day", need);
+    if (prereq >= 0.5)
+        snprintf(lines[n++], 160,
+                 "includes ~%.0f p of unsealed prerequisites", prereq);
     int k_, m_;
     double rate = kept_rate(st, &k_, &m_, NULL);
     if (rate >= 0)
@@ -847,7 +876,7 @@ static void act_drop_goal(UI *ui) {
     toastf(ui, P_MUT, "dropped %s — no judgment", rb);
 }
 
-static void act_study_start(UI *ui, Ref r) {
+static void act_study_start(UI *ui, Ref r, int pomo) {
     Chapter *ch = CH(ui->st, r);
     char rb[64];
     if (ch->done_at) {
@@ -857,12 +886,28 @@ static void act_study_start(UI *ui, Ref r) {
     }
     ui->study = r;
     ui->study_start = time(NULL);
+    ui->pomo = pomo;
+    if (pomo) {
+        ui->pomo_w = 25; ui->pomo_b = 5;
+        ui->pomo_phase = 0; ui->pomo_n = 1;
+        ui->phase_start = ui->study_start;
+        ui->focus_accum = 0;
+    }
     ui->view = V_STUDY;
+}
+
+static double study_minutes(UI *ui) {
+    if (!ui->pomo)
+        return difftime(time(NULL), ui->study_start) / 60.0;
+    double min = ui->focus_accum;
+    if (ui->pomo_phase == 0)
+        min += difftime(time(NULL), ui->phase_start) / 60.0;
+    return min;
 }
 
 static void act_study_finish(UI *ui, int discard) {
     State *st = ui->st;
-    double min = difftime(time(NULL), ui->study_start) / 60.0;
+    double min = study_minutes(ui);
     char rb[64];
     ref_str(st, ui->study, rb, sizeof rb);
 
@@ -919,6 +964,38 @@ static void act_study_finish(UI *ui, int discard) {
                strk >= 2 ? "" : "");
 }
 
+static void act_book_new(UI *ui) {
+    State *st = ui->st;
+    char id[64] = "", title[200] = "", err[256];
+    if (ui_prompt(ui, "new book id (letters/digits/-/_):", id, sizeof id))
+        return;
+    if (ui_prompt(ui, "title:", title, sizeof title)) return;
+    char *i = trim(id), *t = trim(title);
+    if (syl_book_new(st, i, *t ? t : i, 0, 0, err, sizeof err)) {
+        toastf(ui, P_ROSE, "%s", err);
+        return;
+    }
+    ui->view = V_BOOKS;
+    ui->sel_book = st->nbooks - 1;
+    toastf(ui, P_SAGE, "book %s started — press a to add chapters", i);
+}
+
+static void act_chapter_add(UI *ui, int b) {
+    State *st = ui->st;
+    char title[200] = "", est[32] = "", err[256];
+    if (ui_prompt(ui, "chapter title:", title, sizeof title)) return;
+    if (ui_prompt(ui, "estimate (12p · 90m · 2h · empty):", est, sizeof est))
+        return;
+    char *t = trim(title), *e = trim(est);
+    if (syl_book_add(st, st->books[b].id, t, *e ? e : NULL, NULL,
+                     err, sizeof err)) {
+        toastf(ui, P_ROSE, "%s", err);
+        return;
+    }
+    toastf(ui, P_SAGE, "added %s/%d — %s", st->books[b].id,
+           st->books[b].nchs, t);
+}
+
 static void show_help(UI *ui) {
     char lines[12][160];
     int n = 0;
@@ -927,8 +1004,10 @@ static void show_help(UI *ui) {
     snprintf(lines[n++], 160, "1 2 3 4      home · books · goals · stats");
     snprintf(lines[n++], 160, "↑↓ / jk      move      ←→ / hl   switch view");
     snprintf(lines[n++], 160, "enter        open book / start studying");
+    snprintf(lines[n++], 160, "p            pomodoro session (25 + 5 breaks)");
     snprintf(lines[n++], 160, "d            seal a chapter (or drop a goal)");
     snprintf(lines[n++], 160, "g            promise a chapter or book");
+    snprintf(lines[n++], 160, "n / a        new book / add a chapter to it");
     snprintf(lines[n++], 160, "esc          back      q   quit");
     snprintf(lines[n++], 160, " ");
     snprintf(lines[n++], 160, "the CLI still works: khatm help");
@@ -1005,14 +1084,31 @@ int tui_run(State *st) {
             break;
         case K_ENTER:
             if (ui.view == V_HOME && ui.has_suggestion)
-                act_study_start(&ui, ui.suggestion);
+                act_study_start(&ui, ui.suggestion, 0);
             else if (ui.view == V_BOOKS && st->nbooks) {
                 ui.view = V_CHAPTERS;
                 ui.sel_ch = 0;
                 ui.scroll = 0;
             } else if (ui.view == V_CHAPTERS)
                 act_study_start(&ui,
-                                (Ref){ ui.sel_book, ui.sel_ch });
+                                (Ref){ ui.sel_book, ui.sel_ch }, 0);
+            break;
+        case 'p':
+            if (ui.view == V_CHAPTERS)
+                act_study_start(&ui,
+                                (Ref){ ui.sel_book, ui.sel_ch }, 1);
+            else if (ui.view == V_HOME && ui.has_suggestion)
+                act_study_start(&ui, ui.suggestion, 1);
+            break;
+        case 'n':
+            if (ui.view == V_BOOKS || ui.view == V_HOME)
+                act_book_new(&ui);
+            break;
+        case 'a':
+            if (ui.view == V_BOOKS && st->nbooks)
+                act_chapter_add(&ui, ui.sel_book);
+            else if (ui.view == V_CHAPTERS)
+                act_chapter_add(&ui, ui.sel_book);
             break;
         case 'd':
             if (ui.view == V_CHAPTERS)

@@ -155,6 +155,214 @@ static int find_book(State *st, const char *id) {
     return -1;
 }
 
+/* ------------------------------------------------------------------ */
+/* Syllabus writers. Append-only by design: khatm creates files and    */
+/* adds lines, it never rewrites what the user wrote. Each writer also */
+/* updates the in-memory state so the TUI sees the change live.        */
+/* ------------------------------------------------------------------ */
+
+static int id_ok(const char *id) {
+    if (!*id) return 0;
+    for (const char *p = id; *p; p++)
+        if (!isalnum((unsigned char)*p) && *p != '-' && *p != '_')
+            return 0;
+    return strlen(id) < 64;
+}
+
+static int title_ok(const char *t) {
+    if (!*t || strlen(t) > 200) return 0;
+    /* these would change how the line parses back */
+    return !strpbrk(t, "~[]\n") && t[0] != '#' && t[0] != '-';
+}
+
+/* "12p" | "90m" | "2h" | "1h30m" — the forms extract_estimate reads */
+static int est_parse(const char *s, double *pages, double *min) {
+    *pages = 0; *min = 0;
+    if (!s || !*s) return 0;
+    char *p;
+    double num = strtod(s, &p);
+    if (p == s || num <= 0) return -1;
+    if (*p == 'p' && !p[1]) { *pages = num; return 0; }
+    if (*p == 'm' && !p[1]) { *min = num; return 0; }
+    if (*p == 'h') {
+        *min = num * 60;
+        if (!p[1]) return 0;
+        double m2 = strtod(p + 1, &p);
+        if (m2 > 0 && *p == 'm' && !p[1]) { *min += m2; return 0; }
+    }
+    return -1;
+}
+
+/* Append a line, inserting a newline first if the file doesn't end
+ * with one (a hand-edited file may not). */
+static int append_line(const char *path, const char *line) {
+    int need_nl = 0;
+    FILE *r = fopen(path, "rb");
+    if (r) {
+        if (fseek(r, -1L, SEEK_END) == 0) {
+            int c = fgetc(r);
+            need_nl = c != '\n' && c != EOF;
+        }
+        fclose(r);
+    }
+    FILE *f = fopen(path, "a");
+    if (!f) return -1;
+    fprintf(f, "%s%s\n", need_nl ? "\n" : "", line);
+    fclose(f);
+    return 0;
+}
+
+#define ERR(...) (snprintf(err, errn, __VA_ARGS__), -1)
+
+int syl_book_new(State *st, const char *id, const char *title,
+                 double pages, time_t deadline, char *err, size_t errn) {
+    if (!id_ok(id))
+        return ERR("book id must be letters, digits, - or _ (it becomes "
+                   "the filename and the ref prefix)");
+    if (!title_ok(title))
+        return ERR("that title would not parse back cleanly "
+                   "(avoid ~ [ ] and leading # or -)");
+    if (find_book(st, id) >= 0)
+        return ERR("book \"%s\" already exists", id);
+
+    char path[1024];
+    snprintf(path, sizeof path, "%s/books/%s.md", st->root, id);
+    FILE *f = fopen(path, "r");
+    if (f) { fclose(f); return ERR("%s already exists", path); }
+    if (!(f = fopen(path, "w")))
+        return ERR("cannot create %s", path);
+    fprintf(f, "# %s\n", title);
+    if (pages > 0 || deadline) {
+        fputs("meta:", f);
+        if (pages > 0) fprintf(f, " pages=%g", pages);
+        if (deadline) {
+            char d[32];
+            fmt_date(deadline, d, sizeof d);
+            fprintf(f, " deadline=%s", d);
+        }
+        fputc('\n', f);
+    }
+    fclose(f);
+
+    Book bk = {0};
+    bk.id = xstrdup(id);
+    bk.title = xstrdup(title);
+    bk.path = xstrdup(path);
+    bk.deadline = deadline;
+    bk.total_pages = pages;
+    bk.mtime = st->now;
+    *VPUSH(st->books, st->nbooks, st->cbooks) = bk;
+    return 0;
+}
+
+/* Resolve id to a loaded book, or to a syllabus file that exists but
+ * holds no chapters yet (parse_book skips those). *path_out always set
+ * on success; returns the book index or -1 (file-only). -2 = no book. */
+static int writable_book(State *st, const char *id,
+                         char *path_out, size_t pn) {
+    int b = find_book(st, id);
+    if (b >= 0) {
+        snprintf(path_out, pn, "%s", st->books[b].path);
+        return b;
+    }
+    if (!id_ok(id)) return -2;
+    snprintf(path_out, pn, "%s/books/%s.md", st->root, id);
+    FILE *f = fopen(path_out, "r");
+    if (!f) return -2;
+    fclose(f);
+    return -1;
+}
+
+int syl_book_add(State *st, const char *id, const char *title,
+                 const char *est, const char *needs,
+                 char *err, size_t errn) {
+    char path[1024];
+    int b = writable_book(st, id, path, sizeof path);
+    if (b == -2)
+        return ERR("no book \"%s\" — khatm book new %s \"Title\"", id, id);
+    if (!title_ok(title))
+        return ERR("that title would not parse back cleanly "
+                   "(avoid ~ [ ] and leading # or -)");
+    double ep = 0, em = 0;
+    if (est && *est && est_parse(est, &ep, &em))
+        return ERR("bad estimate \"%s\" (try 12p, 90m, 2h)", est);
+    if (needs && strpbrk(needs, "[]\n"))
+        return ERR("needs list cannot contain [ or ]");
+
+    char line[512];
+    int n = snprintf(line, sizeof line, "- [ ] %s", title);
+    if (est && *est)
+        n += snprintf(line + n, sizeof line - (size_t)n, " ~%s", est);
+    if (needs && *needs)
+        snprintf(line + n, sizeof line - (size_t)n, " [needs: %s]", needs);
+    if (append_line(path, line))
+        return ERR("cannot write to %s", path);
+
+    if (b >= 0) {
+        Book *bk = &st->books[b];
+        Chapter ch = {0};
+        ch.title = xstrdup(title);
+        ch.section = bk->nsecs - 1;     /* appended → last section */
+        ch.est_pages = ep;
+        ch.est_min = em;
+        if (needs && *needs) {
+            char *list = xstrdup(needs);
+            for (char *tok = strtok(list, ","); tok;
+                 tok = strtok(NULL, ",")) {
+                char *t = trim(tok);
+                if (*t) *VPUSH(ch.needs_raw, ch.nneeds_raw,
+                               ch.cneeds_raw) = xstrdup(t);
+            }
+            free(list);
+        }
+        *VPUSH(bk->chs, bk->nchs, bk->cchs) = ch;
+        Chapter *pc = &bk->chs[bk->nchs - 1];
+        for (int i = 0; i < pc->nneeds_raw; i++)
+            syl_resolve_token(st, b, pc->needs_raw[i], pc);
+    }
+    return 0;
+}
+
+int syl_book_section(State *st, const char *id, const char *title,
+                     const char *needs, char *err, size_t errn) {
+    char path[1024];
+    int b = writable_book(st, id, path, sizeof path);
+    if (b == -2)
+        return ERR("no book \"%s\" — khatm book new %s \"Title\"", id, id);
+    if (!title_ok(title))
+        return ERR("that title would not parse back cleanly "
+                   "(avoid ~ [ ] and leading # or -)");
+    if (needs && strpbrk(needs, "[]\n"))
+        return ERR("needs list cannot contain [ or ]");
+
+    char line[512];
+    int n = snprintf(line, sizeof line, "## %s", title);
+    if (needs && *needs)
+        snprintf(line + n, sizeof line - (size_t)n, " [needs: %s]", needs);
+    if (append_line(path, line))
+        return ERR("cannot write to %s", path);
+
+    if (b >= 0) {
+        Section sec = {0};
+        sec.title = xstrdup(title);
+        if (needs && *needs) {
+            char *list = xstrdup(needs);
+            for (char *tok = strtok(list, ","); tok;
+                 tok = strtok(NULL, ",")) {
+                char *t = trim(tok);
+                if (*t) *VPUSH(sec.needs_raw, sec.nneeds_raw,
+                               sec.cneeds_raw) = xstrdup(t);
+            }
+            free(list);
+        }
+        *VPUSH(st->books[b].secs, st->books[b].nsecs,
+               st->books[b].csecs) = sec;
+    }
+    return 0;
+}
+
+#undef ERR
+
 static int resolve_local(State *st, int b, const char *tok, Chapter *ch,
                          int append) {
     Book *bk = &st->books[b];

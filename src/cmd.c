@@ -5,35 +5,59 @@
 
 static Chapter *CH(State *st, Ref r) { return &st->books[r.book].chs[r.ch]; }
 
+static int iprefix(const char *s, const char *pfx) {
+    while (*pfx) {
+        if (tolower((unsigned char)*s) != tolower((unsigned char)*pfx))
+            return 0;
+        s++; pfx++;
+    }
+    return 1;
+}
+
+/* Book lookup: exact id, else unique case-insensitive prefix.
+ * Returns the index, -1 if nothing matches, -2 if the prefix is ambiguous. */
+static int find_book(State *st, const char *id) {
+    for (int b = 0; b < st->nbooks; b++)
+        if (ieq(st->books[b].id, id)) return b;
+    int hit = -1, n = 0;
+    for (int b = 0; b < st->nbooks; b++)
+        if (iprefix(st->books[b].id, id)) { hit = b; n++; }
+    return n == 1 ? hit : n ? -2 : -1;
+}
+
 int resolve_target(State *st, const char *arg, Ref *out, int allow_book) {
     char bookid[256];
     const char *slash = strchr(arg, '/');
     if (slash) {
         snprintf(bookid, sizeof bookid, "%.*s", (int)(slash - arg), arg);
-        for (int b = 0; b < st->nbooks; b++) {
-            if (!ieq(st->books[b].id, bookid)) continue;
-            const char *rest = slash + 1;
-            char *end;
-            long n = strtol(rest, &end, 10);
-            if (*rest && !*end) {
-                if (n < 1 || n > st->books[b].nchs) {
-                    fprintf(stderr, "khatm: %s has chapters 1..%d\n",
-                            st->books[b].id, st->books[b].nchs);
-                    return -1;
-                }
-                *out = (Ref){ b, (int)n - 1 };
-                return 0;
-            }
-            for (int c = 0; c < st->books[b].nchs; c++)
-                if (icontains(st->books[b].chs[c].title, rest)) {
-                    *out = (Ref){ b, c };
-                    return 0;
-                }
-            fprintf(stderr, "khatm: no chapter matching \"%s\" in %s\n",
-                    rest, st->books[b].id);
+        int b = find_book(st, bookid);
+        if (b == -2) {
+            fprintf(stderr, "khatm: book \"%s\" is ambiguous\n", bookid);
             return -1;
         }
-        fprintf(stderr, "khatm: no book \"%s\"\n", bookid);
+        if (b < 0) {
+            fprintf(stderr, "khatm: no book \"%s\"\n", bookid);
+            return -1;
+        }
+        const char *rest = slash + 1;
+        char *end;
+        long n = strtol(rest, &end, 10);
+        if (*rest && !*end) {
+            if (n < 1 || n > st->books[b].nchs) {
+                fprintf(stderr, "khatm: %s has chapters 1..%d\n",
+                        st->books[b].id, st->books[b].nchs);
+                return -1;
+            }
+            *out = (Ref){ b, (int)n - 1 };
+            return 0;
+        }
+        for (int c = 0; c < st->books[b].nchs; c++)
+            if (icontains(st->books[b].chs[c].title, rest)) {
+                *out = (Ref){ b, c };
+                return 0;
+            }
+        fprintf(stderr, "khatm: no chapter matching \"%s\" in %s\n",
+                rest, st->books[b].id);
         return -1;
     }
 
@@ -49,6 +73,38 @@ int resolve_target(State *st, const char *arg, Ref *out, int allow_book) {
             return 0;
         }
 
+    /* "knr5": a book id (or unique prefix of one) glued to a chapter
+     * number — the zero-friction logging form. */
+    size_t alen = strlen(arg), digs = alen;
+    while (digs > 0 && isdigit((unsigned char)arg[digs - 1])) digs--;
+    if (digs > 0 && digs < alen) {
+        snprintf(bookid, sizeof bookid, "%.*s", (int)digs, arg);
+        int b = find_book(st, bookid);
+        if (b >= 0) {
+            long n = strtol(arg + digs, NULL, 10);
+            if (n >= 1 && n <= st->books[b].nchs) {
+                *out = (Ref){ b, (int)n - 1 };
+                return 0;
+            }
+            fprintf(stderr, "khatm: %s has chapters 1..%d\n",
+                    st->books[b].id, st->books[b].nchs);
+            return -1;
+        }
+    }
+
+    int pb = find_book(st, arg);
+    if (pb >= 0) {
+        if (!allow_book) {
+            fprintf(stderr,
+                    "khatm: \"%s\" is the book %s — name a chapter "
+                    "(%s/3) for this command\n", arg, st->books[pb].id,
+                    st->books[pb].id);
+            return -1;
+        }
+        *out = (Ref){ pb, -1 };
+        return 0;
+    }
+
     Ref hits[8]; int nh = 0;
     for (int b = 0; b < st->nbooks; b++)
         for (int c = 0; c < st->books[b].nchs; c++)
@@ -62,6 +118,14 @@ int resolve_target(State *st, const char *arg, Ref *out, int allow_book) {
             fprintf(stderr, "  %-12s %s\n", ref_str(st, hits[i], rb, sizeof rb),
                     CH(st, hits[i])->title);
         }
+        return -1;
+    }
+    if (pb == -2) {
+        fprintf(stderr, "khatm: \"%s\" matches several books:", arg);
+        for (int b = 0; b < st->nbooks; b++)
+            if (iprefix(st->books[b].id, arg))
+                fprintf(stderr, " %s", st->books[b].id);
+        fprintf(stderr, "\n");
         return -1;
     }
     fprintf(stderr, "khatm: nothing matches \"%s\"\n", arg);
@@ -130,6 +194,122 @@ int cmd_init(State *st, int argc, char **argv) {
     printf("  khatm root ready at %s\n", st->root);
     printf("  add books as %s/books/<id>.md — then: khatm next\n", st->root);
     return 0;
+}
+
+/* khatm book new <id> [title...] [--pages N] [--deadline WHEN]
+ * khatm book add <id> <title...> [--est 12p] [--needs LIST]
+ * khatm book section <id> <title...> [--needs LIST]
+ * khatm book path <id> */
+int cmd_book(State *st, int argc, char **argv) {
+    static const char *use =
+        "usage: khatm book new <id> [title] [--pages N] [--deadline D]\n"
+        "       khatm book add <id> <title> [--est 12p|2h] [--needs ...]\n"
+        "       khatm book section <id> <title> [--needs ...]\n"
+        "       khatm book path <id>\n";
+    if (argc < 2) { fputs(use, stderr); return 1; }
+    const char *sub = argv[0], *id = argv[1];
+
+    if (strcmp(sub, "path") == 0) {
+        Ref r;
+        if (resolve_target(st, id, &r, 1) || r.ch != -1) {
+            if (g_json) api_err("no such book");
+            return 1;
+        }
+        printf("%s\n", st->books[r.book].path);
+        return 0;
+    }
+
+    /* gather: positionals after id join into the title; flags take values */
+    char title[256] = "";
+    const char *est = NULL, *needs = NULL, *deadline_s = NULL;
+    double pages = 0;
+    for (int i = 2; i < argc; i++) {
+        const char *a = argv[i];
+        const char **val = NULL;
+        if (strcmp(a, "--est") == 0) val = &est;
+        else if (strcmp(a, "--needs") == 0) val = &needs;
+        else if (strcmp(a, "--deadline") == 0) val = &deadline_s;
+        else if (strcmp(a, "--pages") == 0) {
+            if (i + 1 >= argc || parse_nonneg_double(argv[++i], &pages)) {
+                fprintf(stderr, "khatm: bad pages value\n");
+                if (g_json) api_err("bad pages");
+                return 1;
+            }
+            continue;
+        } else if (a[0] == '-' && a[1] == '-') {
+            fprintf(stderr, "khatm: unknown option \"%s\"\n", a);
+            if (g_json) api_err("unknown option");
+            return 1;
+        } else {
+            size_t len = strlen(title);
+            snprintf(title + len, sizeof title - len, "%s%s",
+                     len ? " " : "", a);
+            continue;
+        }
+        if (i + 1 >= argc) {
+            fprintf(stderr, "khatm: %s needs a value\n", a);
+            if (g_json) api_err("missing value");
+            return 1;
+        }
+        *val = argv[++i];
+    }
+
+    char err[256] = "";
+    if (strcmp(sub, "new") == 0) {
+        time_t by = 0;
+        if (deadline_s) {
+            by = parse_when(deadline_s, st->now);
+            if (!by) {
+                fprintf(stderr, "khatm: bad deadline \"%s\"\n", deadline_s);
+                if (g_json) api_err("bad date");
+                return 1;
+            }
+        }
+        if (syl_book_new(st, id, *title ? title : id, pages, by,
+                         err, sizeof err)) {
+            fprintf(stderr, "khatm: %s\n", err);
+            if (g_json) api_err(err);
+            return 1;
+        }
+        if (g_json) return api_book_json("book-new", id, 0);
+        printf("  book %s started — now add chapters:\n"
+               "  khatm book add %s \"Chapter title\" --est 12p\n", id, id);
+        return 0;
+    }
+    if (strcmp(sub, "add") == 0 || strcmp(sub, "section") == 0) {
+        if (!*title) {
+            fprintf(stderr, "khatm: give the %s a title\n",
+                    sub[0] == 'a' ? "chapter" : "section");
+            if (g_json) api_err("missing title");
+            return 1;
+        }
+        int rc = sub[0] == 'a'
+            ? syl_book_add(st, id, title, est, needs, err, sizeof err)
+            : syl_book_section(st, id, title, needs, err, sizeof err);
+        if (rc) {
+            fprintf(stderr, "khatm: %s\n", err);
+            if (g_json) api_err(err);
+            return 1;
+        }
+        int b = -1;
+        for (int i = 0; i < st->nbooks; i++)
+            if (ieq(st->books[i].id, id)) { b = i; break; }
+        int chn = b >= 0 ? st->books[b].nchs : 1;
+        if (sub[0] == 'a') {
+            if (g_json) return api_book_json("book-add", id, chn);
+            printf("  added %s/%d — %s\n", b >= 0 ? st->books[b].id : id,
+                   chn, title);
+            if (needs) printf("  (khatm doctor verifies the needs)\n");
+        } else {
+            if (g_json) return api_book_json("book-section", id, 0);
+            printf("  section \"%s\" opened — chapters added now belong "
+                   "to it\n", title);
+        }
+        return 0;
+    }
+    fputs(use, stderr);
+    if (g_json) api_err("unknown book subcommand");
+    return 1;
 }
 
 int cmd_books(State *st, int argc, char **argv) {
@@ -270,19 +450,60 @@ int cmd_log(State *st, int argc, char **argv) {
 
 int cmd_study(State *st, int argc, char **argv) {
     if (argc < 1) {
-        fprintf(stderr, "usage: khatm study <chapter>\n");
+        fprintf(stderr,
+                "usage: khatm study <chapter> [--pomo [25/5]]\n");
         return 1;
+    }
+    int pomo = 0, pw = 25, pb = 5;
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--pomo") == 0) {
+            pomo = 1;
+            if (i + 1 < argc && isdigit((unsigned char)argv[i + 1][0])) {
+                int w, b;
+                if (sscanf(argv[++i], "%d/%d", &w, &b) != 2 ||
+                    w < 1 || w > 240 || b < 1 || b > 60) {
+                    fprintf(stderr, "khatm: bad pomodoro spec \"%s\" "
+                            "(try 25/5: focus/break minutes)\n", argv[i]);
+                    return 1;
+                }
+                pw = w; pb = b;
+            }
+        } else {
+            fprintf(stderr, "khatm: unknown option \"%s\"\n", argv[i]);
+            return 1;
+        }
     }
     Ref r;
     if (resolve_target(st, argv[0], &r, 0)) return 1;
     Chapter *ch = CH(st, r);
-    char rb[64];
+    char rb[64], buf[64];
     printf("  studying %s — %s\n", ref_str(st, r, rb, sizeof rb), ch->title);
-    printf("  press Enter when you stop.\n");
-    time_t start = time(NULL);
-    char buf[64];
-    (void)fgets(buf, sizeof buf, stdin);
-    double min = difftime(time(NULL), start) / 60.0;
+    double min;
+    if (pomo) {
+        printf("  pomodoro %d/%d — Enter at any time ends the session.\n",
+               pw, pb);
+        double focus = 0;
+        int nfoc = 1;
+        for (;;) {
+            printf("  ◌ focus %d — %d min\n", nfoc, pw);
+            fflush(stdout);
+            time_t t0 = time(NULL);
+            int got = plat_wait_enter(pw * 60000);
+            focus += difftime(time(NULL), t0) / 60.0;
+            if (got) break;
+            printf("\a  ☕ break — %d min (breaks are not logged)\n", pb);
+            fflush(stdout);
+            if (plat_wait_enter(pb * 60000)) break;
+            printf("\a");
+            nfoc++;
+        }
+        min = focus;
+    } else {
+        printf("  press Enter when you stop.\n");
+        time_t start = time(NULL);
+        (void)fgets(buf, sizeof buf, stdin);
+        min = difftime(time(NULL), start) / 60.0;
+    }
     if (min < 1) min = 1;
     printf("  %.0f min. pages read (Enter for none): ", min);
     fflush(stdout);
@@ -381,48 +602,67 @@ int cmd_goal(State *st, int argc, char **argv) {
         return 1;
     }
 
-    double work = 0;
-    if (r.ch >= 0)
-        work = ch_weight(st, r) * (1.0 - ch_progress(st, r));
-    else
-        work = book_remaining_pages(st, r.book);
+    goals_refresh(st);
+    double prereq = 0;
+    double work = plan_goal_work(st, r, &prereq);
     int days = days_between(st->now, deadline);
     if (days < 1) days = 1;
     double need = work / days;
     double vel = velocity_pages(st, -1, 28);
 
+    /* what the other open promises already claim per day */
+    double committed = 0;
+    for (int i = 0; i < st->ngoals; i++) {
+        Goal *go = &st->goals[i];
+        if (go->status != GOAL_OPEN) continue;
+        int dd = days_between(st->now, go->by);
+        committed += plan_goal_work(st, go->target, NULL)
+                   / (dd < 1 ? 1 : dd);
+    }
+    int steep = vel > 0 && need > vel * 1.5;
+    int overload = vel > 0 && committed > 0 && committed + need > vel * 1.3;
+
     char rb[64], dl[32];
+    ref_str(st, r, rb, sizeof rb);
     fmt_date(deadline, dl, sizeof dl);
+
+    /* the price, before the promise */
+    if (!g_json) {
+        printf("  the price of %s by %s (%d day%s):\n",
+               rb, dl, days, days == 1 ? "" : "s");
+        printf("  required pace: %s~%.0f pages/day%s", CBOLD, need, CRESET);
+        if (prereq >= 0.5)
+            printf(" (incl. ~%.0f p of unsealed prerequisites)", prereq);
+        if (vel > 0)
+            printf("  (your 4-week pace: %.*f/day — %s)",
+                   vel < 10 ? 1 : 0, vel,
+                   need <= vel ? "comfortably yours" :
+                   need <= vel * 1.5 ? "a stretch" : "steep");
+        printf("\n");
+        if (overload)
+            printf("  %s⚠ with your other promises that is %.0f pages/day "
+                   "in total — above your pace.%s\n",
+                   CYELLOW, committed + need, CRESET);
+        if ((steep || overload) && plat_stdin_tty()) {
+            printf("  promise anyway? [y/N] ");
+            fflush(stdout);
+            char ans[16] = "";
+            if (!fgets(ans, sizeof ans, stdin)) ans[0] = 0;
+            char *a = trim(ans);
+            if (*a != 'y' && *a != 'Y') {
+                printf("  no promise made — re-aim and come back.\n");
+                return 0;
+            }
+        }
+    }
+
     if (ev_goal(st, r, deadline)) {
         if (g_json) api_err("could not write to the log");
         return 1;
     }
     if (g_json) return api_goal_json(st, r, deadline);
-    ref_str(st, r, rb, sizeof rb);
 
-    printf("  promised: %s by %s (%d day%s)\n",
-           rb, dl, days, days == 1 ? "" : "s");
-    printf("  required pace: %s~%.0f pages/day%s", CBOLD, need, CRESET);
-    if (vel > 0) {
-        printf("  (your 4-week pace: %.*f/day — %s)",
-               vel < 10 ? 1 : 0, vel,
-               need <= vel ? "comfortably yours" :
-               need <= vel * 1.5 ? "a stretch" : "steep — sure?");
-    }
-    printf("\n");
-    double committed = 0;
-    for (int i = 0; i < st->ngoals; i++) {
-        Goal *go = &st->goals[i];
-        if (go->status != GOAL_OPEN) continue;
-        double w = go->target.ch >= 0
-            ? ch_weight(st, go->target) * (1.0 - ch_progress(st, go->target))
-            : book_remaining_pages(st, go->target.book);
-        int dd = days_between(st->now, go->by);
-        committed += w / (dd < 1 ? 1 : dd);
-    }
-    if (vel > 0 && committed > vel * 1.3)
-        printf("  %s⚠ all open goals together need %.0f pages/day — "
-               "above your pace.%s\n", CYELLOW, committed, CRESET);
+    printf("  promised: %s by %s\n", rb, dl);
     show_kept_rate(st);
     return 0;
 }
@@ -510,6 +750,11 @@ int cmd_pace(State *st, int argc, char **argv) {
         ui_bar(book_progress(st, b), 30);
         printf(" %.0f%%\n", book_progress(st, b) * 100);
         printf("  remaining: ~%.0f pages-equivalent\n", rem);
+        double cal = book_calib_pages(st, b);
+        if (cal == 1.0) cal = book_calib_min(st, b);
+        if (cal < 0.99 || cal > 1.01)
+            printf("  %s(estimates calibrated ×%.2f from your sealed "
+                   "chapters)%s\n", CDIM, cal, CRESET);
         if (vp > 0 && rem > 0) {
             int days = (int)(rem / vp + 0.999);
             char d[32];
@@ -560,21 +805,28 @@ int cmd_status(State *st, int argc, char **argv) {
 
     int any = 0;
     char rb[64];
+    double vel = velocity_pages(st, -1, 28);
+    double committed = 0;
     for (int g = 0; g < st->ngoals; g++) {
         Goal *go = &st->goals[g];
         if (go->status != GOAL_OPEN) continue;
         if (!any) printf("\n  %sopen promises:%s\n", CBOLD, CRESET);
         any = 1;
-        double w = go->target.ch >= 0
-            ? ch_weight(st, go->target) * (1.0 - ch_progress(st, go->target))
-            : book_remaining_pages(st, go->target.book);
+        double w = plan_goal_work(st, go->target, NULL);
         int left = days_between(st->now, go->by);
+        int dd = left < 1 ? 1 : left;
+        committed += w / dd;
         fmt_date(go->by, d, sizeof d);
-        printf("   %-14s by %s — %s%dd left%s, ~%.0f pages to go\n",
+        printf("   %-14s by %s — %s%dd left%s, ~%.0f pages to go "
+               "(~%.1f/day)\n",
                ref_str(st, go->target, rb, sizeof rb), d,
                left <= 1 ? CRED : left <= 3 ? CYELLOW : CGREEN, left, CRESET,
-               w);
+               w, w / dd);
     }
+    if (any && vel > 0)
+        printf("   %sall promises: ~%.1f p/day · your pace %.1f — %s%s\n",
+               committed <= vel ? CGREEN : CYELLOW, committed, vel,
+               committed <= vel ? "on track" : "over-committed", CRESET);
 
     NextPick pick[1];
     if (plan_next(st, pick, 1) > 0) {
@@ -674,27 +926,36 @@ int cmd_doctor(State *st, int argc, char **argv) {
         issues++;
     }
 
-    for (int b = 0; b < st->nbooks; b++) {
-        Book *bk = &st->books[b];
-        double sum = 0; int n = 0;
-        for (int c = 0; c < bk->nchs; c++) {
-            Chapter *ch = &bk->chs[c];
-            if (ch->done_at && ch->est_min > 0 && ch->minutes > 0) {
-                sum += ch->minutes / ch->est_min;
-                n++;
+    double vel = velocity_pages(st, -1, 28);
+    if (vel > 0)
+        for (int g = 0; g < st->ngoals; g++) {
+            Goal *go = &st->goals[g];
+            if (go->status != GOAL_OPEN) continue;
+            int dd = days_between(st->now, go->by);
+            if (dd < 1) dd = 1;
+            double need = plan_goal_work(st, go->target, NULL) / dd;
+            if (need > vel * 2) {
+                fmt_date(go->by, d, sizeof d);
+                printf("  %s!%s at-risk promise: %s by %s needs "
+                       "%.0f pages/day — your pace is %.1f\n",
+                       CYELLOW, CRESET,
+                       ref_str(st, go->target, rb, sizeof rb), d, need, vel);
+                issues++;
             }
         }
-        if (n >= 2) {
-            double bias = sum / n;
-            if (bias > 1.25)
-                printf("  %s~%s %s: you under-estimate time by ~%.0f%% "
-                       "(across %d sealed chapters)\n", CCYAN, CRESET,
-                       bk->id, (bias - 1) * 100, n);
-            else if (bias < 0.8)
-                printf("  %s~%s %s: you over-estimate time by ~%.0f%% — "
-                       "you are faster than you think\n", CCYAN, CRESET,
-                       bk->id, (1 - bias) * 100);
-        }
+
+    for (int b = 0; b < st->nbooks; b++) {
+        Book *bk = &st->books[b];
+        int n;
+        double bias = book_bias_min(st, b, &n);
+        if (bias > 1.25)
+            printf("  %s~%s %s: you under-estimate time by ~%.0f%% "
+                   "(across %d sealed chapters)\n", CCYAN, CRESET,
+                   bk->id, (bias - 1) * 100, n);
+        else if (bias > 0 && bias < 0.8)
+            printf("  %s~%s %s: you over-estimate time by ~%.0f%% — "
+                   "you are faster than you think\n", CCYAN, CRESET,
+                   bk->id, (1 - bias) * 100);
     }
 
     for (int b = 0; b < st->nbooks; b++) {

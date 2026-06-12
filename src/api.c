@@ -64,11 +64,12 @@ static void j_goal(State *st, Goal *go) {
     putchar(','); jkey("by"); jdate(go->by);
     putchar(','); jkey("status"); js(goal_status_str(go->status));
     if (go->status == GOAL_OPEN) {
-        double work = go->target.ch >= 0
-            ? ch_weight(st, go->target) * (1 - ch_progress(st, go->target))
-            : book_remaining_pages(st, go->target.book);
+        double prereq = 0;
+        double work = plan_goal_work(st, go->target, &prereq);
         int left = days_between(st->now, go->by);
         putchar(','); jkey("days_left"); printf("%d", left);
+        putchar(','); jkey("work_pages"); printf("%.1f", work);
+        putchar(','); jkey("prereq_pages"); printf("%.1f", prereq);
         putchar(','); jkey("need_per_day");
         printf("%.2f", work / (left < 1 ? 1 : left));
     }
@@ -78,7 +79,7 @@ static void j_goal(State *st, Goal *go) {
     putchar('}');
 }
 
-static void j_chapter(State *st, int b, int c) {
+static void j_chapter(State *st, int b, int c, time_t implied) {
     Book *bk = &st->books[b];
     Chapter *ch = &bk->chs[c];
     Ref r = { b, c };
@@ -111,10 +112,11 @@ static void j_chapter(State *st, int b, int c) {
         js(ref_str(st, ch->needs[i], rb, sizeof rb));
     }
     putchar(']');
+    putchar(','); jkey("implied_due"); jdate(ch->done_at ? 0 : implied);
     putchar('}');
 }
 
-static void j_book(State *st, int b) {
+static void j_book(State *st, int b, const time_t *implied, int base) {
     Book *bk = &st->books[b];
     putchar('{');
     jkey("id"); js(bk->id);
@@ -129,7 +131,7 @@ static void j_book(State *st, int b) {
     putchar(','); jkey("chapters"); putchar('[');
     for (int c = 0; c < bk->nchs; c++) {
         if (c) putchar(',');
-        j_chapter(st, b, c);
+        j_chapter(st, b, c, implied ? implied[base + c] : 0);
     }
     putchar(']');
     putchar('}');
@@ -149,6 +151,22 @@ int cmd_dump(State *st, int argc, char **argv) {
     int k, m, o;
     double rate = kept_rate(st, &k, &m, &o);
 
+    double committed = 0;
+    for (int g = 0; g < st->ngoals; g++) {
+        Goal *go = &st->goals[g];
+        if (go->status != GOAL_OPEN) continue;
+        int dd = days_between(st->now, go->by);
+        committed += plan_goal_work(st, go->target, NULL)
+                   / (dd < 1 ? 1 : dd);
+    }
+
+    int total_ch = plan_total_chs(st);
+    time_t *implied = NULL;
+    if (total_ch) {
+        implied = xmalloc((size_t)total_ch * sizeof *implied);
+        plan_implied(st, implied);
+    }
+
     putchar('{');
     jkey("api"); fputs("1", stdout);
     putchar(','); jkey("now"); jts(st->now);
@@ -162,6 +180,7 @@ int cmd_dump(State *st, int argc, char **argv) {
     putchar(','); jkey("today_min"); printf("%.1f", today);
     putchar(','); jkey("velocity_pages_28d");
     printf("%.3f", velocity_pages(st, -1, 28));
+    putchar(','); jkey("committed_pages_per_day"); printf("%.2f", committed);
     putchar(','); jkey("goals_kept"); printf("%d", k);
     putchar(','); jkey("goals_missed"); printf("%d", m);
     putchar(','); jkey("goals_open"); printf("%d", o);
@@ -187,11 +206,12 @@ int cmd_dump(State *st, int argc, char **argv) {
     putchar(']');
 
     putchar(','); jkey("books"); putchar('[');
-    for (int b = 0; b < st->nbooks; b++) {
+    for (int b = 0, base = 0; b < st->nbooks; base += st->books[b].nchs, b++) {
         if (b) putchar(',');
-        j_book(st, b);
+        j_book(st, b, implied, base);
     }
     putchar(']');
+    free(implied);
 
     putchar(','); jkey("goals"); putchar('[');
     for (int g = 0; g < st->ngoals; g++) {
@@ -257,24 +277,44 @@ int api_done_json(State *st, Ref r, int already) {
 
 int api_goal_json(State *st, Ref r, time_t by) {
     char rb[64];
-    double work = r.ch >= 0
-        ? ch_weight(st, r) * (1 - ch_progress(st, r))
-        : book_remaining_pages(st, r.book);
+    double prereq = 0;
+    double work = plan_goal_work(st, r, &prereq);
     int days = days_between(st->now, by);
     if (days < 1) days = 1;
     double vel = velocity_pages(st, -1, 28);
     int k, m;
     double rate = kept_rate(st, &k, &m, NULL);
 
+    /* per-day load across every open promise (this one included) */
+    double committed = 0;
+    for (int g = 0; g < st->ngoals; g++) {
+        Goal *go = &st->goals[g];
+        if (go->status != GOAL_OPEN) continue;
+        int dd = days_between(st->now, go->by);
+        committed += plan_goal_work(st, go->target, NULL)
+                   / (dd < 1 ? 1 : dd);
+    }
+
     fputs("{\"ok\":true,\"event\":\"goal\",", stdout);
     jkey("target"); js(ref_str(st, r, rb, sizeof rb));
     putchar(','); jkey("by"); jdate(by);
     putchar(','); jkey("days"); printf("%d", days);
     putchar(','); jkey("need_per_day"); printf("%.2f", work / days);
+    putchar(','); jkey("prereq_pages"); printf("%.1f", prereq);
+    putchar(','); jkey("committed_per_day"); printf("%.2f", committed);
     putchar(','); jkey("velocity_pages_28d"); printf("%.3f", vel);
     putchar(','); jkey("kept_rate");
     if (rate >= 0) printf("%.4f", rate);
     else fputs("null", stdout);
+    fputs("}\n", stdout);
+    return 0;
+}
+
+int api_book_json(const char *event, const char *id, int chapter) {
+    fputs("{\"ok\":true,\"event\":", stdout);
+    js(event);
+    putchar(','); jkey("book"); js(id);
+    if (chapter > 0) { putchar(','); jkey("chapter"); printf("%d", chapter); }
     fputs("}\n", stdout);
     return 0;
 }

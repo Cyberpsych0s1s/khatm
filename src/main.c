@@ -13,7 +13,12 @@ static void usage(void) {
 "  khatm status                  today, streak, promises, what to study\n"
 "  khatm next                    dependency- and deadline-aware: study this\n"
 "  khatm study <chapter>         timed session (Enter to stop)\n"
+"  khatm study <ch> --pomo [25/5]    pomodoro: focus/break intervals;\n"
+"                                only focused minutes are logged\n"
 "  khatm log <chapter> <dur>     log a session  [--pages N] [--date D]\n"
+"  khatm book new <id> [title]   start a syllabus  [--pages N] [--deadline D]\n"
+"  khatm book add <id> <title>   append a chapter  [--est 12p] [--needs ...]\n"
+"  khatm book section <id> <t>   append a section heading\n"
 "  khatm goal <target> --by <when>   promise; priced before you make it\n"
 "  khatm goal                    list open promises and your kept-rate\n"
 "  khatm goal --drop <target>    drop a promise (never counts against you)\n"
@@ -102,6 +107,7 @@ int main(int argc, char **argv) {
                    strcmp(cmd, "shelf") == 0 || strcmp(cmd, "graph") == 0))
         return cmd_dump(&st, 0, NULL);
 
+    if (strcmp(cmd, "book") == 0)   return cmd_book(&st, ac, av);
     if (strcmp(cmd, "books") == 0)  return cmd_books(&st, ac, av);
     if (strcmp(cmd, "status") == 0) return cmd_status(&st, ac, av);
     if (strcmp(cmd, "next") == 0)   return cmd_next(&st, ac, av);
