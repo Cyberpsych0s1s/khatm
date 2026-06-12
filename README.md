@@ -18,7 +18,7 @@ deadlines you've set yourself.
 
 The TUI in use   sessions, goals, and a chapter getting sealed:
 
-https://github.com/Cyberpsych0s1s/adsub/raw/main/assets/demo.mp4
+https://github.com/user-attachments/assets/8e32cca6-0a04-4036-9cd3-61aec204e670
 
 ## Build
 
