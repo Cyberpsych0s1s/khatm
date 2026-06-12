@@ -5,7 +5,7 @@
 
 static void usage(void) {
     printf(
-"khatm (" KHATM_AR ") — a build system for your studying\n"
+"khatm (" KHATM_AR ")   a build system for your studying\n"
 "\n"
 "  khatm                         the TUI (default in a terminal)\n"
 "  khatm init                    prepare the data dir (default ~/.khatm)\n"
@@ -35,7 +35,7 @@ static void usage(void) {
 "\n"
 "  chapters: ostep/3, ostep/pointers, or a bare title substring\n"
 "  dates: 2026-07-01, friday, tomorrow, +5d, +2w\n"
-"  data: $KHATM_DIR or ~/.khatm — plain markdown + an append-only log\n");
+"  data: $KHATM_DIR or ~/.khatm   plain markdown + an append-only log\n");
 }
 
 int main(int argc, char **argv) {
@@ -81,7 +81,7 @@ int main(int argc, char **argv) {
     if (syl_load(&st)) {
         if (!want_tui) {
             fprintf(stderr,
-                    "khatm: no data at %s — run `khatm init` first\n",
+                    "khatm: no data at %s   run `khatm init` first\n",
                     st.root);
             return 1;
         }

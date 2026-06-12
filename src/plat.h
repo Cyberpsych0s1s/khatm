@@ -4,7 +4,7 @@
 #include <stddef.h>
 
 /* Platform layer: everything OS-specific lives behind these calls.
- * plat.c has two implementations — POSIX (termios/poll/ioctl) and
+ * plat.c has two implementations   POSIX (termios/poll/ioctl) and
  * Win32 console (SetConsoleMode/ReadConsoleInput). The TUI itself
  * speaks only ANSI escapes, which both understand. */
 
@@ -13,7 +13,7 @@ enum { K_UP = 1000, K_DOWN, K_LEFT, K_RIGHT, K_ENTER, K_ESC, K_BS };
 
 /* One-time console setup (UTF-8 output, ANSI escape processing on
  * Windows). Returns 1 if stdout is a terminal that will render
- * escapes — the "may we use color?" answer. */
+ * escapes   the "may we use color?" answer. */
 int  plat_console_init(void);
 
 int  plat_raw(void);            /* enter raw mode + alt screen; 0 ok */

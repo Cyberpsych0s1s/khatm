@@ -175,7 +175,7 @@ static int title_ok(const char *t) {
     return !strpbrk(t, "~[]\n") && t[0] != '#' && t[0] != '-';
 }
 
-/* "12p" | "90m" | "2h" | "1h30m" — the forms extract_estimate reads */
+/* "12p" | "90m" | "2h" | "1h30m"   the forms extract_estimate reads */
 static int est_parse(const char *s, double *pages, double *min) {
     *pages = 0; *min = 0;
     if (!s || !*s) return 0;
@@ -279,7 +279,7 @@ int syl_book_add(State *st, const char *id, const char *title,
     char path[1024];
     int b = writable_book(st, id, path, sizeof path);
     if (b == -2)
-        return ERR("no book \"%s\" — khatm book new %s \"Title\"", id, id);
+        return ERR("no book \"%s\"   khatm book new %s \"Title\"", id, id);
     if (!title_ok(title))
         return ERR("that title would not parse back cleanly "
                    "(avoid ~ [ ] and leading # or -)");
@@ -328,7 +328,7 @@ int syl_book_section(State *st, const char *id, const char *title,
     char path[1024];
     int b = writable_book(st, id, path, sizeof path);
     if (b == -2)
-        return ERR("no book \"%s\" — khatm book new %s \"Title\"", id, id);
+        return ERR("no book \"%s\"   khatm book new %s \"Title\"", id, id);
     if (!title_ok(title))
         return ERR("that title would not parse back cleanly "
                    "(avoid ~ [ ] and leading # or -)");

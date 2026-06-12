@@ -96,7 +96,7 @@ void ui_khatma(State *st, int b) {
             printf(", over %d days", days_between(first, last) + 1);
         printf("\n");
     }
-    printf("   it is on your shelf now — %skhatm shelf%s\n", CBOLD, CRESET);
+    printf("   it is on your shelf now   %skhatm shelf%s\n", CBOLD, CRESET);
 }
 
 void ui_shelf(State *st) {
@@ -109,10 +109,10 @@ void ui_shelf(State *st) {
         if (all) shelved[n++] = b;
     }
 
-    printf("\n  %syour shelf%s — %d book%s sealed\n\n", CBOLD, CRESET,
+    printf("\n  %syour shelf%s   %d book%s sealed\n\n", CBOLD, CRESET,
            n, n == 1 ? "" : "s");
     if (!n) {
-        printf("  %s(empty — every chapter of a book sealed puts its spine"
+        printf("  %s(empty   every chapter of a book sealed puts its spine"
                " here, forever)%s\n\n", CDIM, CRESET);
         return;
     }

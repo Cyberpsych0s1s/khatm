@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# smoke.sh — end-to-end exercise of every khatm command against a temp dir.
+# smoke.sh   end-to-end exercise of every khatm command against a temp dir.
 set -u
 BIN="${1:-./khatm}"
-# KHATM_TEST_DIR overrides the temp dir — pass a relative path to smoke-test
+# KHATM_TEST_DIR overrides the temp dir   pass a relative path to smoke-test
 # the Windows binary from WSL or MSYS2 (a native .exe can't see /tmp).
 if [ -n "${KHATM_TEST_DIR:-}" ]; then
     DIR="$KHATM_TEST_DIR"; rm -rf "$DIR"; mkdir -p "$DIR"

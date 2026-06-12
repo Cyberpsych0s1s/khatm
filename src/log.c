@@ -2,19 +2,29 @@
 #include "khatm.h"
 
 const char *log_path(State *st, char *buf, size_t n) {
-    snprintf(buf, n, "%s/log.txt", st->root);
+    if ((size_t)snprintf(buf, n, "%s/log.txt", st->root) >= n)
+        return NULL;
     return buf;
 }
 
 int log_append(State *st, const char *line) {
     char path[512];
-    FILE *f = fopen(log_path(st, path, sizeof path), "a");
+    const char *p = log_path(st, path, sizeof path);
+    if (!p) {
+        fprintf(stderr, "khatm: log path too long\n");
+        return -1;
+    }
+    FILE *f = fopen(p, "a");
     if (!f) {
         fprintf(stderr, "khatm: cannot open %s for append\n", path);
         return -1;
     }
-    fprintf(f, "%s\n", line);
-    fclose(f);
+    int bad = fprintf(f, "%s\n", line) < 0;
+    if (fclose(f) == EOF) bad = 1;
+    if (bad) {
+        fprintf(stderr, "khatm: write to %s failed\n", path);
+        return -1;
+    }
     return 0;
 }
 
@@ -65,7 +75,12 @@ static const char *kv_str(const char *line, const char *key,
 
 int log_load(State *st) {
     char path[512];
-    FILE *f = fopen(log_path(st, path, sizeof path), "r");
+    const char *p = log_path(st, path, sizeof path);
+    if (!p) {
+        fprintf(stderr, "khatm: log path too long\n");
+        return -1;
+    }
+    FILE *f = fopen(p, "r");
     if (!f) return 0;
 
     char line[1024];
@@ -91,10 +106,11 @@ int log_load(State *st) {
             if (at > ch->last_session) ch->last_session = at;
         } else if (strcmp(ev, "done") == 0) {
             if (parse_ref(st, target, &r) || r.ch < 0) continue;
-            Chapter *ch = &st->books[r.book].chs[r.ch];
-            if (!ch->done_at || ch->done_at == 1 ||
-                (ch->done_at == st->books[r.book].mtime && ch->done_in_file))
-                ch->done_at = at;
+            /* Last done line wins, mirroring ev_done's overwrite   replay
+             * must land on the same state the live process had. A log
+             * timestamp also always beats the syllabus-file placeholder
+             * (done_at == 1 or == file mtime). */
+            st->books[r.book].chs[r.ch].done_at = at;
         } else if (strcmp(ev, "goal") == 0) {
             if (parse_ref(st, target, &r)) continue;
             char by[64];
@@ -105,10 +121,18 @@ int log_load(State *st) {
             *VPUSH(st->goals, st->ngoals, st->cgoals) = g;
         } else if (strcmp(ev, "drop-goal") == 0) {
             if (parse_ref(st, target, &r)) continue;
+            /* set= identifies the exact goal by its set_at timestamp.
+             * Lines written before set= existed fall back to the old
+             * newest-match scan. */
+            char setbuf[64];
+            time_t set_at = 0;
+            if (kv_str(s, "set", setbuf, sizeof setbuf))
+                set_at = parse_ts(setbuf);
             for (int g = st->ngoals - 1; g >= 0; g--)
                 if (st->goals[g].status == GOAL_OPEN &&
                     st->goals[g].target.book == r.book &&
-                    st->goals[g].target.ch == r.ch) {
+                    st->goals[g].target.ch == r.ch &&
+                    (!set_at || st->goals[g].set_at == set_at)) {
                     st->goals[g].status = GOAL_DROPPED;
                     break;
                 }
@@ -135,14 +159,14 @@ const char *ref_str(State *st, Ref r, char *buf, size_t n) {
 }
 
 int ev_session(State *st, Ref r, double min, double pages, time_t when) {
-    char ts[64], rb[64], line[256];
+    char ts[64], rb[256], line[512];
     fmt_ts(when, ts, sizeof ts);
     ref_str(st, r, rb, sizeof rb);
     if (pages > 0)
-        snprintf(line, sizeof line, "%s session %s min=%.0f pages=%g",
+        snprintf(line, sizeof line, "%s session %s min=%g pages=%g",
                  ts, rb, min, pages);
     else
-        snprintf(line, sizeof line, "%s session %s min=%.0f", ts, rb, min);
+        snprintf(line, sizeof line, "%s session %s min=%g", ts, rb, min);
     if (log_append(st, line)) return -1;
 
     Session ses = { when, r, min, pages };
@@ -161,7 +185,7 @@ int ev_session(State *st, Ref r, double min, double pages, time_t when) {
 }
 
 int ev_done(State *st, Ref r) {
-    char ts[64], rb[64], line[256];
+    char ts[64], rb[256], line[512];
     fmt_ts(st->now, ts, sizeof ts);
     snprintf(line, sizeof line, "%s done %s",
              ts, ref_str(st, r, rb, sizeof rb));
@@ -172,7 +196,7 @@ int ev_done(State *st, Ref r) {
 }
 
 int ev_goal(State *st, Ref r, time_t by) {
-    char ts[64], rb[64], dl[32], line[256];
+    char ts[64], rb[256], dl[32], line[512];
     fmt_ts(st->now, ts, sizeof ts);
     fmt_date(by, dl, sizeof dl);
     snprintf(line, sizeof line, "%s goal %s by=%s",
@@ -184,18 +208,23 @@ int ev_goal(State *st, Ref r, time_t by) {
     return 0;
 }
 
-int ev_dropgoal(State *st, Ref r) {
-    char ts[64], rb[64], line[256];
+int ev_dropgoal_g(State *st, int g) {
+    Goal *go = &st->goals[g];
+    char ts[64], setts[64], rb[256], line[512];
     fmt_ts(st->now, ts, sizeof ts);
-    snprintf(line, sizeof line, "%s drop-goal %s",
-             ts, ref_str(st, r, rb, sizeof rb));
+    fmt_ts(go->set_at, setts, sizeof setts);
+    snprintf(line, sizeof line, "%s drop-goal %s set=%s",
+             ts, ref_str(st, go->target, rb, sizeof rb), setts);
     if (log_append(st, line)) return -1;
+    go->status = GOAL_DROPPED;
+    return 0;
+}
+
+int ev_dropgoal(State *st, Ref r) {
     for (int g = st->ngoals - 1; g >= 0; g--)
         if (st->goals[g].status == GOAL_OPEN &&
             st->goals[g].target.book == r.book &&
-            st->goals[g].target.ch == r.ch) {
-            st->goals[g].status = GOAL_DROPPED;
-            break;
-        }
-    return 0;
+            st->goals[g].target.ch == r.ch)
+            return ev_dropgoal_g(st, g);
+    return 1;
 }

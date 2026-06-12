@@ -65,7 +65,7 @@ int resolve_target(State *st, const char *arg, Ref *out, int allow_book) {
         if (ieq(st->books[b].id, arg)) {
             if (!allow_book) {
                 fprintf(stderr,
-                        "khatm: \"%s\" is a book — name a chapter "
+                        "khatm: \"%s\" is a book   name a chapter "
                         "(%s/3) for this command\n", arg, arg);
                 return -1;
             }
@@ -74,7 +74,7 @@ int resolve_target(State *st, const char *arg, Ref *out, int allow_book) {
         }
 
     /* "knr5": a book id (or unique prefix of one) glued to a chapter
-     * number — the zero-friction logging form. */
+     * number   the zero-friction logging form. */
     size_t alen = strlen(arg), digs = alen;
     while (digs > 0 && isdigit((unsigned char)arg[digs - 1])) digs--;
     if (digs > 0 && digs < alen) {
@@ -96,7 +96,7 @@ int resolve_target(State *st, const char *arg, Ref *out, int allow_book) {
     if (pb >= 0) {
         if (!allow_book) {
             fprintf(stderr,
-                    "khatm: \"%s\" is the book %s — name a chapter "
+                    "khatm: \"%s\" is the book %s   name a chapter "
                     "(%s/3) for this command\n", arg, st->books[pb].id,
                     st->books[pb].id);
             return -1;
@@ -145,11 +145,11 @@ static void show_kept_rate(State *st) {
 void announce_records(State *st, int prev_streak, double prev_week) {
     int s = streak_current(st);
     if (s > prev_streak && s >= 3 && s == streak_longest(st))
-        printf("  %s★ new record:%s longest streak — %d days\n",
+        printf("  %s★ new record:%s longest streak   %d days\n",
                CMAGENTA, CRESET, s);
     double w = biggest_week_min(st);
     if (w > prev_week && prev_week > 0 && w >= 120)
-        printf("  %s★ new record:%s biggest week — %.1f hours\n",
+        printf("  %s★ new record:%s biggest week   %.1f hours\n",
                CMAGENTA, CRESET, w / 60.0);
 }
 
@@ -192,7 +192,7 @@ int cmd_init(State *st, int argc, char **argv) {
         printf("  wrote a sample syllabus: %s\n", path);
     }
     printf("  khatm root ready at %s\n", st->root);
-    printf("  add books as %s/books/<id>.md — then: khatm next\n", st->root);
+    printf("  add books as %s/books/<id>.md   then: khatm next\n", st->root);
     return 0;
 }
 
@@ -272,7 +272,7 @@ int cmd_book(State *st, int argc, char **argv) {
             return 1;
         }
         if (g_json) return api_book_json("book-new", id, 0);
-        printf("  book %s started — now add chapters:\n"
+        printf("  book %s started   now add chapters:\n"
                "  khatm book add %s \"Chapter title\" --est 12p\n", id, id);
         return 0;
     }
@@ -297,12 +297,12 @@ int cmd_book(State *st, int argc, char **argv) {
         int chn = b >= 0 ? st->books[b].nchs : 1;
         if (sub[0] == 'a') {
             if (g_json) return api_book_json("book-add", id, chn);
-            printf("  added %s/%d — %s\n", b >= 0 ? st->books[b].id : id,
+            printf("  added %s/%d   %s\n", b >= 0 ? st->books[b].id : id,
                    chn, title);
             if (needs) printf("  (khatm doctor verifies the needs)\n");
         } else {
             if (g_json) return api_book_json("book-section", id, 0);
-            printf("  section \"%s\" opened — chapters added now belong "
+            printf("  section \"%s\" opened   chapters added now belong "
                    "to it\n", title);
         }
         return 0;
@@ -315,7 +315,7 @@ int cmd_book(State *st, int argc, char **argv) {
 int cmd_books(State *st, int argc, char **argv) {
     (void)argc; (void)argv;
     if (!st->nbooks) {
-        printf("  no books yet — drop a syllabus in %s/books/\n", st->root);
+        printf("  no books yet   drop a syllabus in %s/books/\n", st->root);
         return 0;
     }
     printf("\n");
@@ -345,13 +345,13 @@ int cmd_next(State *st, int argc, char **argv) {
     NextPick picks[3];
     int n = plan_next(st, picks, 3);
     if (!n) {
-        printf("  nothing to study — all chapters sealed or blocked.\n");
+        printf("  nothing to study   all chapters sealed or blocked.\n");
         printf("  (khatm doctor will show anything stuck.)\n");
         return 0;
     }
     char rb[64];
     Chapter *ch = CH(st, picks[0].r);
-    printf("\n  %sstudy now:%s %s — %s%s%s\n", CBOLD, CRESET,
+    printf("\n  %sstudy now:%s %s   %s%s%s\n", CBOLD, CRESET,
            ref_str(st, picks[0].r, rb, sizeof rb), CBOLD, ch->title, CRESET);
     printf("  %swhy:%s %s\n", CDIM, CRESET, picks[0].reason);
     if (ch->est_min > 0) {
@@ -361,7 +361,7 @@ int cmd_next(State *st, int argc, char **argv) {
         printf("  ~%.0f pages left\n", ch->est_pages - ch->pages);
     }
     for (int i = 1; i < n; i++) {
-        printf("  %salso ready:%s %s — %s %s(%s)%s\n", CDIM, CRESET,
+        printf("  %salso ready:%s %s   %s %s(%s)%s\n", CDIM, CRESET,
                ref_str(st, picks[i].r, rb, sizeof rb),
                CH(st, picks[i].r)->title, CDIM, picks[i].reason, CRESET);
     }
@@ -373,7 +373,7 @@ static void after_session(State *st, Ref r, double min, double pages,
                           int prev_streak, double prev_week) {
     Chapter *ch = CH(st, r);
     char rb[64];
-    printf("  logged %.0f min%s on %s — %s\n",
+    printf("  logged %.0f min%s on %s   %s\n",
            min, pages > 0 ? "" : "", ref_str(st, r, rb, sizeof rb), ch->title);
     double prog = ch_progress(st, r);
     if (prog > 0 && prog < 1) {
@@ -381,7 +381,7 @@ static void after_session(State *st, Ref r, double min, double pages,
         ui_bar(prog, 24);
         printf(" %.0f%%", prog * 100);
         if (prog >= 0.8)
-            printf("  %s— nearly there, one push seals it%s", CGREEN, CRESET);
+            printf("  %s  nearly there, one push seals it%s", CGREEN, CRESET);
         printf("\n");
     }
     int s = streak_current(st);
@@ -477,21 +477,21 @@ int cmd_study(State *st, int argc, char **argv) {
     if (resolve_target(st, argv[0], &r, 0)) return 1;
     Chapter *ch = CH(st, r);
     char rb[64], buf[64];
-    printf("  studying %s — %s\n", ref_str(st, r, rb, sizeof rb), ch->title);
+    printf("  studying %s   %s\n", ref_str(st, r, rb, sizeof rb), ch->title);
     double min;
     if (pomo) {
-        printf("  pomodoro %d/%d — Enter at any time ends the session.\n",
+        printf("  pomodoro %d/%d   Enter at any time ends the session.\n",
                pw, pb);
         double focus = 0;
         int nfoc = 1;
         for (;;) {
-            printf("  ◌ focus %d — %d min\n", nfoc, pw);
+            printf("  ◌ focus %d   %d min\n", nfoc, pw);
             fflush(stdout);
             time_t t0 = time(NULL);
             int got = plat_wait_enter(pw * 60000);
             focus += difftime(time(NULL), t0) / 60.0;
             if (got) break;
-            printf("\a  ☕ break — %d min (breaks are not logged)\n", pb);
+            printf("\a  ☕ break   %d min (breaks are not logged)\n", pb);
             fflush(stdout);
             if (plat_wait_enter(pb * 60000)) break;
             printf("\a");
@@ -529,12 +529,19 @@ int cmd_goal(State *st, int argc, char **argv) {
             return 1;
         }
         char rb[64];
-        if (ev_dropgoal(st, r)) {
+        int rc = ev_dropgoal(st, r);
+        if (rc > 0) {
+            if (g_json) api_err("no open goal on that target");
+            else fprintf(stderr, "khatm: no open goal on %s\n",
+                         ref_str(st, r, rb, sizeof rb));
+            return 1;
+        }
+        if (rc) {
             if (g_json) api_err("could not write to the log");
             return 1;
         }
         if (g_json) return api_drop_json(st, r);
-        printf("  goal on %s dropped — no judgment, it never counts "
+        printf("  goal on %s dropped   no judgment, it never counts "
                "against your word.\n", ref_str(st, r, rb, sizeof rb));
         return 0;
     }
@@ -554,7 +561,7 @@ int cmd_goal(State *st, int argc, char **argv) {
                    left, CRESET);
             any = 1;
         }
-        if (!any) printf("  no open goals — khatm goal <target> --by <when>\n");
+        if (!any) printf("  no open goals   khatm goal <target> --by <when>\n");
         show_kept_rate(st);
         return 0;
     }
@@ -634,14 +641,14 @@ int cmd_goal(State *st, int argc, char **argv) {
         if (prereq >= 0.5)
             printf(" (incl. ~%.0f p of unsealed prerequisites)", prereq);
         if (vel > 0)
-            printf("  (your 4-week pace: %.*f/day — %s)",
+            printf("  (your 4-week pace: %.*f/day   %s)",
                    vel < 10 ? 1 : 0, vel,
                    need <= vel ? "comfortably yours" :
                    need <= vel * 1.5 ? "a stretch" : "steep");
         printf("\n");
         if (overload)
             printf("  %s⚠ with your other promises that is %.0f pages/day "
-                   "in total — above your pace.%s\n",
+                   "in total   above your pace.%s\n",
                    CYELLOW, committed + need, CRESET);
         if ((steep || overload) && plat_stdin_tty()) {
             printf("  promise anyway? [y/N] ");
@@ -650,7 +657,7 @@ int cmd_goal(State *st, int argc, char **argv) {
             if (!fgets(ans, sizeof ans, stdin)) ans[0] = 0;
             char *a = trim(ans);
             if (*a != 'y' && *a != 'Y') {
-                printf("  no promise made — re-aim and come back.\n");
+                printf("  no promise made   re-aim and come back.\n");
                 return 0;
             }
         }
@@ -701,7 +708,7 @@ int cmd_done(State *st, int argc, char **argv) {
         return 0;
     }
     if (!g_json && !deps_met(st, r)) {
-        printf("  %snote:%s prerequisites of %s are not all sealed — "
+        printf("  %snote:%s prerequisites of %s are not all sealed   "
                "sealing anyway.\n", CYELLOW, CRESET,
                ref_str(st, r, rb, sizeof rb));
     }
@@ -719,7 +726,7 @@ int cmd_done(State *st, int argc, char **argv) {
         if (go->status == GOAL_KEPT && go->resolved_at == st->now &&
             goal_covers(st, go, r)) {
             fmt_date(go->by, d, sizeof d);
-            printf("   %s✓ goal kept%s — promised by %s\n",
+            printf("   %s✓ goal kept%s   promised by %s\n",
                    CGREEN, CRESET, d);
         }
     }
@@ -769,13 +776,13 @@ int cmd_pace(State *st, int argc, char **argv) {
                 else {
                     int dleft = days_between(st->now, bk->deadline);
                     double need = rem / (dleft < 1 ? 1 : dleft);
-                    printf("  %s%d days late at this pace — hold %.0f p/day "
+                    printf("  %s%d days late at this pace   hold %.0f p/day "
                            "to make it%s\n", CYELLOW, -slack,
                            need, CRESET);
                 }
             }
         } else if (rem > 0) {
-            printf("  no recent sessions — log one and pace appears.\n");
+            printf("  no recent sessions   log one and pace appears.\n");
         }
     }
     printf("\n");
@@ -792,7 +799,7 @@ int cmd_status(State *st, int argc, char **argv) {
         if (day_start(st->sess[i].at) / 86400 == tk)
             today_min += st->sess[i].minutes;
 
-    printf("\n  %skhatm%s — ", CBOLD, CRESET);
+    printf("\n  %skhatm%s   ", CBOLD, CRESET);
     char d[32];
     fmt_date(st->now, d, sizeof d);
     printf("%s\n\n", d);
@@ -817,20 +824,20 @@ int cmd_status(State *st, int argc, char **argv) {
         int dd = left < 1 ? 1 : left;
         committed += w / dd;
         fmt_date(go->by, d, sizeof d);
-        printf("   %-14s by %s — %s%dd left%s, ~%.0f pages to go "
+        printf("   %-14s by %s   %s%dd left%s, ~%.0f pages to go "
                "(~%.1f/day)\n",
                ref_str(st, go->target, rb, sizeof rb), d,
                left <= 1 ? CRED : left <= 3 ? CYELLOW : CGREEN, left, CRESET,
                w, w / dd);
     }
     if (any && vel > 0)
-        printf("   %sall promises: ~%.1f p/day · your pace %.1f — %s%s\n",
+        printf("   %sall promises: ~%.1f p/day · your pace %.1f   %s%s\n",
                committed <= vel ? CGREEN : CYELLOW, committed, vel,
                committed <= vel ? "on track" : "over-committed", CRESET);
 
     NextPick pick[1];
     if (plan_next(st, pick, 1) > 0) {
-        printf("\n  %sstudy now:%s %s — %s %s(%s)%s\n", CBOLD, CRESET,
+        printf("\n  %sstudy now:%s %s   %s %s(%s)%s\n", CBOLD, CRESET,
                ref_str(st, pick[0].r, rb, sizeof rb),
                CH(st, pick[0].r)->title, CDIM, pick[0].reason, CRESET);
     }
@@ -920,7 +927,7 @@ int cmd_doctor(State *st, int argc, char **argv) {
         int already_done = go->target.ch >= 0 && CH(st, go->target)->done_at;
         if (already_done) continue;
         fmt_date(go->by, d, sizeof d);
-        printf("  %s!%s missed promise: %s by %s — re-promise "
+        printf("  %s!%s missed promise: %s by %s   re-promise "
                "(khatm goal) or drop it (khatm goal --drop)\n",
                CYELLOW, CRESET, ref_str(st, go->target, rb, sizeof rb), d);
         issues++;
@@ -937,7 +944,7 @@ int cmd_doctor(State *st, int argc, char **argv) {
             if (need > vel * 2) {
                 fmt_date(go->by, d, sizeof d);
                 printf("  %s!%s at-risk promise: %s by %s needs "
-                       "%.0f pages/day — your pace is %.1f\n",
+                       "%.0f pages/day   your pace is %.1f\n",
                        CYELLOW, CRESET,
                        ref_str(st, go->target, rb, sizeof rb), d, need, vel);
                 issues++;
@@ -953,7 +960,7 @@ int cmd_doctor(State *st, int argc, char **argv) {
                    "(across %d sealed chapters)\n", CCYAN, CRESET,
                    bk->id, (bias - 1) * 100, n);
         else if (bias > 0 && bias < 0.8)
-            printf("  %s~%s %s: you over-estimate time by ~%.0f%% — "
+            printf("  %s~%s %s: you over-estimate time by ~%.0f%%   "
                    "you are faster than you think\n", CCYAN, CRESET,
                    bk->id, (1 - bias) * 100);
     }
@@ -965,7 +972,7 @@ int cmd_doctor(State *st, int argc, char **argv) {
             for (int c = 0; c < bk->nchs; c++)
                 if (!bk->chs[c].done_at) undone++;
             if (undone)
-                printf("  %s·%s %s has no deadline — pace forecasts will "
+                printf("  %s·%s %s has no deadline   pace forecasts will "
                        "be weaker (meta: deadline=...)\n", CDIM, CRESET,
                        bk->id);
         }

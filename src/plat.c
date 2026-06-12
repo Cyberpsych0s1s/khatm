@@ -116,7 +116,7 @@ int plat_stdin_tty(void) {
 }
 
 int plat_wait_enter(int timeout_ms) {
-    /* no console: nothing interactive can arrive — end the session
+    /* no console: nothing interactive can arrive   end the session
      * rather than risk blocking on a pipe forever */
     if (!_isatty(0)) return -1;
     HANDLE in = GetStdHandle(STD_INPUT_HANDLE);

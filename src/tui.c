@@ -102,7 +102,7 @@ typedef struct UI {
     Ref suggestion; int has_suggestion;
     Ref study; time_t study_start;
     /* pomodoro: phase 0 = focus, 1 = break; focus_accum counts only
-     * completed focus time — breaks are never logged */
+     * completed focus time   breaks are never logged */
     int pomo, pomo_w, pomo_b, pomo_phase, pomo_n;
     time_t phase_start;
     double focus_accum;
@@ -239,7 +239,7 @@ static void d_home(UI *ui) {
         ui->suggestion = pick[0].r;
         Chapter *ch = CH(st, ui->suggestion);
         omove(row++, 1);
-        op("   %s▌%s %s%s%s — %s%s\033[K", fg(P_GOLDHI), TR, TB,
+        op("   %s▌%s %s%s%s   %s%s\033[K", fg(P_GOLDHI), TR, TB,
            ref_str(st, ui->suggestion, rb, sizeof rb), TR,
            fit(ch->title, ui->w - 20), "");
         omove(row++, 1);
@@ -260,12 +260,12 @@ static void d_home(UI *ui) {
                fg(P_FAINT), TR);
     } else if (!st->nbooks) {
         omove(row++, 1);
-        op("   no books yet — add a syllabus at %s/books/<id>.md\033[K",
+        op("   no books yet   add a syllabus at %s/books/<id>.md\033[K",
            st->root);
         row++;
     } else {
         omove(row++, 1);
-        op("   all chapters sealed or blocked — see 4 stats, or doctor "
+        op("   all chapters sealed or blocked   see 4 stats, or doctor "
            "in the CLI\033[K");
         row++;
     }
@@ -277,7 +277,7 @@ static void d_home(UI *ui) {
     op("   %s%spromises%s\033[K", TB, fg(P_MUT), TR);
     if (!n) {
         omove(row++, 1);
-        op("   %snone open — press g on a chapter to give your word%s\033[K",
+        op("   %snone open   press g on a chapter to give your word%s\033[K",
            fg(P_FAINT), TR);
     }
     for (int i = 0; i < n && row < ui->h - 11; i++) {
@@ -311,7 +311,7 @@ static void d_books(UI *ui) {
     if (ui->sel_book < 0) ui->sel_book = 0;
     if (!st->nbooks) {
         omove(row, 1);
-        op("   no books — add a syllabus at %s/books/<id>.md\033[K", st->root);
+        op("   no books   add a syllabus at %s/books/<id>.md\033[K", st->root);
         return;
     }
     for (int b = 0; b < st->nbooks && row < ui->h - 2; b++) {
@@ -426,7 +426,7 @@ static void d_goals(UI *ui) {
 
     if (!n) {
         omove(row++, 1);
-        op("   %snone — press g on a chapter or book to give your "
+        op("   %snone   press g on a chapter or book to give your "
            "word%s\033[K", fg(P_FAINT), TR);
     }
     for (int i = 0; i < n && row < ui->h - 8; i++) {
@@ -512,7 +512,7 @@ static void d_stats(UI *ui) {
     op("   %s%sshelf%s\033[K", TB, fg(P_MUT), TR);
     if (!sealed_books) {
         omove(row++, 1);
-        op("   %sempty — a fully sealed book lives here forever%s\033[K",
+        op("   %sempty   a fully sealed book lives here forever%s\033[K",
            fg(P_FAINT), TR);
     } else {
         static const int spinec[6] = { 131, 67, 65, 96, 137, 73 };
@@ -605,7 +605,7 @@ static void d_study(UI *ui) {
                      ui->pomo_n, ui->pomo_w, ui->pomo_b, focused);
         else
             snprintf(info, sizeof info,
-                     "break — stretch · %.0f min focused so far", focused);
+                     "break   stretch · %.0f min focused so far", focused);
     } else {
         int elapsed = (int)difftime(now, ui->study_start);
         int mm = elapsed / 60, ss = elapsed % 60;
@@ -622,7 +622,7 @@ static void d_study(UI *ui) {
     int row = ui->h / 2 - 6;
     if (row < 6) row = 6;
     char line[256];
-    snprintf(line, sizeof line, "%s — %s",
+    snprintf(line, sizeof line, "%s   %s",
              ref_str(st, ui->study, rb, sizeof rb), ch->title);
     omove(row, 1);
     int pad = (ui->w - dlen(line)) / 2;
@@ -770,7 +770,7 @@ static void act_seal(UI *ui, Ref r) {
             goal_covers(st, go, r)) {
             char d[32];
             fmt_date(go->by, d, sizeof d);
-            snprintf(lines[n++], 160, "%s✓ promise kept%s — you said by %s",
+            snprintf(lines[n++], 160, "%s✓ promise kept%s   you said by %s",
                      fg(P_SAGE), TR, d);
             break;
         }
@@ -809,7 +809,7 @@ static void act_goal(UI *ui, Ref target) {
     State *st = ui->st;
     char buf[64] = "", rb[64], dl[32], lines[8][160];
     if (target.ch >= 0 && CH(st, target)->done_at) {
-        toastf(ui, P_MUT, "already sealed — promise something living");
+        toastf(ui, P_MUT, "already sealed   promise something living");
         return;
     }
     if (ui_prompt(ui, "promise it by (2026-07-01 · friday · +5d):",
@@ -831,7 +831,7 @@ static void act_goal(UI *ui, Ref target) {
              TB, ref_str(st, target, rb, sizeof rb), TR, dl,
              days, days == 1 ? "" : "s");
     if (vel > 0)
-        snprintf(lines[n++], 160, "needs ~%.0f p/day · your pace %.*f — %s",
+        snprintf(lines[n++], 160, "needs ~%.0f p/day · your pace %.*f   %s",
                  need, vel < 10 ? 1 : 0, vel,
                  need <= vel ? "comfortably yours" :
                  need <= vel * 1.5 ? "a stretch" : "steep");
@@ -869,11 +869,11 @@ static void act_drop_goal(UI *ui) {
     snprintf(lines[2], 160, " ");
     snprintf(lines[3], 160, "[enter] drop it      [esc] keep it");
     if (ui_modal(ui, lines, 4, P_AMBER) != K_ENTER) return;
-    if (ev_dropgoal(st, go->target)) {
+    if (ev_dropgoal_g(st, idx[ui->sel_goal])) {
         toastf(ui, P_ROSE, "could not write to the log");
         return;
     }
-    toastf(ui, P_MUT, "dropped %s — no judgment", rb);
+    toastf(ui, P_MUT, "dropped %s   no judgment", rb);
 }
 
 static void act_study_start(UI *ui, Ref r, int pomo) {
@@ -927,7 +927,7 @@ static void act_study_finish(UI *ui, int discard) {
 
     char buf[32] = "";
     char label[160];
-    snprintf(label, sizeof label, "%.0f min on %s — pages read (enter = none):",
+    snprintf(label, sizeof label, "%.0f min on %s   pages read (enter = none):",
              min, rb);
     ui->view = V_HOME;
     if (ui_prompt(ui, label, buf, sizeof buf)) {
@@ -951,13 +951,13 @@ static void act_study_finish(UI *ui, int discard) {
     double prog = ch_progress(st, ui->study);
     int strk = streak_current(st);
     if (strk > prev_streak && strk >= 3 && strk == streak_longest(st))
-        toastf(ui, P_GOLDHI, "★ new record — longest streak, %d days", strk);
+        toastf(ui, P_GOLDHI, "★ new record   longest streak, %d days", strk);
     else if (biggest_week_min(st) > prev_week && prev_week > 0 &&
              biggest_week_min(st) >= 120)
-        toastf(ui, P_GOLDHI, "★ new record — biggest week, %.1fh",
+        toastf(ui, P_GOLDHI, "★ new record   biggest week, %.1fh",
                biggest_week_min(st) / 60.0);
     else if (prog >= 0.8 && prog < 1)
-        toastf(ui, P_SAGE, "logged %.0fm — %s at %.0f%%, one push seals it "
+        toastf(ui, P_SAGE, "logged %.0fm   %s at %.0f%%, one push seals it "
                "(d on the chapter)", min, rb, prog * 100);
     else
         toastf(ui, P_SAGE, "logged %.0fm on %s%s", min, rb,
@@ -977,7 +977,7 @@ static void act_book_new(UI *ui) {
     }
     ui->view = V_BOOKS;
     ui->sel_book = st->nbooks - 1;
-    toastf(ui, P_SAGE, "book %s started — press a to add chapters", i);
+    toastf(ui, P_SAGE, "book %s started   press a to add chapters", i);
 }
 
 static void act_chapter_add(UI *ui, int b) {
@@ -992,14 +992,14 @@ static void act_chapter_add(UI *ui, int b) {
         toastf(ui, P_ROSE, "%s", err);
         return;
     }
-    toastf(ui, P_SAGE, "added %s/%d — %s", st->books[b].id,
+    toastf(ui, P_SAGE, "added %s/%d   %s", st->books[b].id,
            st->books[b].nchs, t);
 }
 
 static void show_help(UI *ui) {
     char lines[12][160];
     int n = 0;
-    snprintf(lines[n++], 160, "%skhatm%s — keys", TB, TR);
+    snprintf(lines[n++], 160, "%skhatm%s   keys", TB, TR);
     snprintf(lines[n++], 160, " ");
     snprintf(lines[n++], 160, "1 2 3 4      home · books · goals · stats");
     snprintf(lines[n++], 160, "↑↓ / jk      move      ←→ / hl   switch view");

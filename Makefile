@@ -8,7 +8,7 @@ BINDIR  ?= $(PREFIX)/bin
 # Windows (MSYS2/MinGW make sets OS): name the binary khatm.exe.
 # Two sub-cases for the commands in clean/install:
 #  - MSYS2 / Git Bash shells set MSYSTEM, run recipes through sh, and put
-#    $(PREFIX)/bin on PATH — the POSIX commands are the right ones.
+#    $(PREFIX)/bin on PATH   the POSIX commands are the right ones.
 #  - native mingw32-make runs recipes through cmd.exe (`rm`/`install` do
 #    not exist); install goes to the per-user app dir, no admin needed.
 ifeq ($(OS),Windows_NT)

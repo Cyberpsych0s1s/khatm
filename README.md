@@ -1,9 +1,24 @@
-# khatm (ختم)
+<h1 align="center">khatm (ختم)</h1>
+
+<p align="center"><em>seal your books, chapter by chapter</em></p>
+
+<p align="center">
+  <img alt="C99, zero dependencies" src="https://img.shields.io/badge/C99-zero_dependencies-126e62?style=flat-square&logo=c&logoColor=white">
+  <img alt="runs on linux, macOS, windows" src="https://img.shields.io/badge/runs_on-linux_·_macos_·_windows-126e62?style=flat-square">
+  <img alt="TUI, CLI and JSON interfaces" src="https://img.shields.io/badge/interface-TUI_·_CLI_·_JSON-c9a227?style=flat-square">
+  <img alt="plain-text append-only data" src="https://img.shields.io/badge/data-plain_text,_append--only-c9a227?style=flat-square">
+</p>
 
 A little terminal app for tracking your reading/studying. You describe each
 book as a markdown checklist, and khatm keeps track of what's done, what's
 next, how fast you're actually going, and whether you're on track for any
 deadlines you've set yourself.
+
+## Preview
+
+The TUI in use   sessions, goals, and a chapter getting sealed:
+
+https://github.com/Cyberpsych0s1s/adsub/raw/main/assets/demo.mp4
 
 ## Build
 
@@ -26,12 +41,12 @@ make CC=gcc install
 `make install` adapts to where it runs: a POSIX system gets
 `$(PREFIX)/bin` (honoring `DESTDIR` for packaging), an MSYS2/Git-Bash
 shell gets its own `/usr/local/bin`, and native `mingw32-make` under
-cmd.exe copies to `%LOCALAPPDATA%\Programs\khatm` (per-user, no admin —
+cmd.exe copies to `%LOCALAPPDATA%\Programs\khatm` (per-user, no admin  
 add that folder to PATH once). `make uninstall` undoes it.
 
 Everything OS-specific lives in `src/plat.c` (POSIX termios/poll on one
 side, the Win32 console API on the other); the rest of the code is shared.
-The TUI needs a console that renders ANSI escapes — Windows Terminal or
+The TUI needs a console that renders ANSI escapes   Windows Terminal or
 any Windows 10+ conhost is fine. On an older console the TUI won't start,
 but every CLI command still works (without color). Data lives in
 `%USERPROFILE%\.khatm` on Windows, `~/.khatm` elsewhere; `KHATM_DIR`
@@ -73,7 +88,7 @@ $EDITOR ~/.khatm/books/ostep.md # write a syllabus (sample provided)…
 ## Syllabus format
 
 One markdown file per book in `<root>/books/`. khatm never rewrites what
-you wrote — its own `book new`/`book add`/`book section` commands only
+you wrote   its own `book new`/`book add`/`book section` commands only
 create files or append lines, so hand-editing stays safe.
 
 ```markdown
@@ -89,15 +104,15 @@ meta: deadline=2026-08-30 pages=650
 - [ ] Thread API ~10p [needs: 1, otherbook/3]
 ```
 
-- `~18p` / `~2h` / `~90m` — optional estimates (khatm reports how far off
+- `~18p` / `~2h` / `~90m`   optional estimates (khatm reports how far off
   your estimates tend to be).
-- `[needs: ...]` — prerequisites: a chapter number, a section title, a title
+- `[needs: ...]`   prerequisites: a chapter number, a section title, a title
   substring, or `book/ref` across books. Sections pass their needs to every
   chapter inside.
 - Checking `[x]` by hand counts as done; `khatm done` is better (it's dated).
 
 All state khatm writes is one append-only, greppable log: `<root>/log.txt`.
-State is rebuilt from (syllabi, log, clock) on every load — back it up or
+State is rebuilt from (syllabi, log, clock) on every load   back it up or
 sync it with git.
 
 ## Using khatm from other programs
@@ -107,7 +122,7 @@ render from `dump`, call mutations with `--json`, re-`dump`.
 
 ```sh
 khatm dump                          # the read API: full state as one JSON
-                                    #   object — stats (streak, kept-rate,
+                                    #   object   stats (streak, kept-rate,
                                     #   velocity), suggestions with reasons,
                                     #   books → chapters (status: sealed/
                                     #   ready/in_progress/blocked, progress,
@@ -142,7 +157,7 @@ A few small things khatm does to make progress visible:
   unblocked. Finishing a whole book is a **khatma** and adds it to your shelf.
 - Goals show your kept-rate (% of self-set deadlines met on time), and before
   you set one, khatm shows the required pages/day next to your actual 4-week
-  pace — so you know what you're signing up for. Dropping a goal doesn't
+  pace   so you know what you're signing up for. Dropping a goal doesn't
   count against you.
 - Streaks, a session heatmap, and personal records, mentioned only when
   they actually change.

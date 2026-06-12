@@ -47,7 +47,7 @@ static int ch_index(State *st, Ref r) {
     return base + r.ch;
 }
 
-/* Days of focused work left in a chapter at the global 4-week pace —
+/* Days of focused work left in a chapter at the global 4-week pace  
  * at least 1: a blocking chapter always costs its dependents a day. */
 static int est_days(State *st, Ref r, double vel) {
     if (vel <= 0) return 1;
@@ -190,10 +190,10 @@ int plan_next(State *st, NextPick *out, int max) {
             double prog = ch_progress(st, r);
             if (prog >= 0.99) {
                 score += 60.0;
-                WHY("%sfully read — seal it to finish", wl ? ", " : "");
+                WHY("%sfully read   seal it to finish", wl ? ", " : "");
             } else if (prog > 0.05) {
                 score += 50.0 * prog;
-                WHY("%s%.0f%% read — close the loop", wl ? ", " : "",
+                WHY("%s%.0f%% read   close the loop", wl ? ", " : "",
                     prog * 100);
             }
             int unb = count_unblocks(st, r);

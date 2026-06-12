@@ -10,7 +10,7 @@
  * so the word is pre-shaped (Unicode Presentation Forms-B: each letter in
  * its joined glyph) and stored in visual, left-to-right order:
  *   U+FEE2 meem-final + U+FE98 teh-medial + U+FEA7 khah-initial.
- * Markdown/docs keep the logical-order "ختم" — proper renderers do bidi. */
+ * Markdown/docs keep the logical-order "ختم"   proper renderers do bidi. */
 #define KHATM_AR "\xEF\xBB\xA2\xEF\xBA\x98\xEF\xBA\xA7"
 
 void *xmalloc(size_t n);
@@ -97,7 +97,7 @@ typedef struct State {
 } State;
 
 int  syl_load(State *st);
-/* Syllabus writers (append-only — khatm never rewrites user lines).
+/* Syllabus writers (append-only   khatm never rewrites user lines).
  * They also update in-memory state. 0 ok; -1 with a message in err. */
 int  syl_book_new(State *st, const char *id, const char *title,
                   double pages, time_t deadline, char *err, size_t errn);
@@ -115,14 +115,17 @@ void syl_resolve_all(State *st, FILE *complain);
 
 int  log_load(State *st);
 int  log_append(State *st, const char *line);
-const char *log_path(State *st, char *buf, size_t n);
+const char *log_path(State *st, char *buf, size_t n); /* NULL: doesn't fit */
 
 /* Events: append to the log AND fold into in-memory state, so CLI and TUI
- * share one mutation path. */
+ * share one mutation path. 0 ok, -1 log write failed.
+ * ev_dropgoal drops the newest open goal on r (1: no open goal   nothing
+ * appended); ev_dropgoal_g drops st->goals[g] exactly. */
 int  ev_session(State *st, Ref r, double min, double pages, time_t when);
 int  ev_done(State *st, Ref r);
 int  ev_goal(State *st, Ref r, time_t by);
 int  ev_dropgoal(State *st, Ref r);
+int  ev_dropgoal_g(State *st, int g);
 
 int  deps_met(State *st, Ref r);
 int  count_unblocks(State *st, Ref r);
@@ -131,7 +134,7 @@ int  plan_total_chs(State *st);
  * books; 0 = none): the earliest of goals covering it, its book deadline,
  * and deadlines inherited from dependents through needs edges. */
 void plan_implied(State *st, time_t *out);
-/* Pages-equivalent left to complete r — including every unsealed chapter
+/* Pages-equivalent left to complete r   including every unsealed chapter
  * it transitively needs. r.ch == -1: the whole book. prereq_out (may be
  * NULL) receives just the prerequisite portion. */
 double plan_goal_work(State *st, Ref r, double *prereq_out);

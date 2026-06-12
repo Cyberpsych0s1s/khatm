@@ -5,7 +5,7 @@
 static Chapter *CH(State *st, Ref r) { return &st->books[r.book].chs[r.ch]; }
 
 /* Mean(actual / estimate) over a book's sealed chapters, pages or minutes.
- * 0 when there are fewer than 2 samples — too little to read a bias from. */
+ * 0 when there are fewer than 2 samples   too little to read a bias from. */
 static double book_bias(State *st, int b, int want_pages, int *n_out) {
     Book *bk = &st->books[b];
     double sum = 0;
