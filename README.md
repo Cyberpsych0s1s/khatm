@@ -139,7 +139,7 @@ re-runnable, and `dump` is cheap enough to call after every mutation.
 A few small things khatm does to make progress visible:
 
 - Finishing a chapter records the actual time vs. your estimate and what it
-  unblocked. Finishing a whole book is a **khatma** and adds it to your shelf.
+  unblocked. Finishing a whole book is a 'khatma' and adds it to your shelf.
 - Goals show your kept-rate (% of self-set deadlines met on time), and before
   you set one, khatm shows the required pages/day next to your actual 4-week
   pace — so you know what you're signing up for. Dropping a goal doesn't
