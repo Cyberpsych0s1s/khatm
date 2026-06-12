@@ -86,3 +86,8 @@ sync it with git, whatever.
 `--json` and answer with `{"ok":...}` (nonzero exit and `{"ok":false}` on
 failure). Render from dump, mutate with `--json`, dump again; that's enough
 to build a GUI on. Details in `khatm -h`.
+
+## Omar Notes
+This is a bit of a nitpick, but the "ختم" in the top left of the tui looks a bit broken.
+I was unable to solve this programatically for all fonts, so I believe it'd only look correct
+if you use an arabic-supported font. I haven't tested one yet so I'm not 100% sure, for now it's good enough.
