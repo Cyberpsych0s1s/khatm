@@ -60,6 +60,9 @@ void ui_seal(State *st, Ref r, int quiet) {
     if (unb > 0)
         printf("   %sunblocked %d chapter%s%s\n", CCYAN, unb,
                unb == 1 ? "" : "s", CRESET);
+    if (ch->ncards > 0)
+        printf("   %s%d card%s now in review%s   khatm review\n", CCYAN,
+               ch->ncards, ch->ncards == 1 ? "" : "s", CRESET);
 
     int done = 0;
     for (int c = 0; c < bk->nchs; c++)

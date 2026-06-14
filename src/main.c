@@ -23,6 +23,9 @@ static void usage(void) {
 "  khatm goal                    list open promises and your kept-rate\n"
 "  khatm goal --drop <target>    drop a promise (never counts against you)\n"
 "  khatm done <chapter> [-q]     seal a chapter (the ceremony)\n"
+"  khatm review [book]           spaced review of sealed chapters' cards\n"
+"  khatm cards [book]            list review cards and when they fall due\n"
+"  khatm edit [book]             open a book (or the books dir) in $EDITOR\n"
 "  khatm pace [book]             burndown, ETA, required pace\n"
 "  khatm shelf                   every book you have ever sealed\n"
 "  khatm graph [weeks]           session heatmap\n"
@@ -115,6 +118,9 @@ int main(int argc, char **argv) {
     if (strcmp(cmd, "study") == 0)  return cmd_study(&st, ac, av);
     if (strcmp(cmd, "goal") == 0)   return cmd_goal(&st, ac, av);
     if (strcmp(cmd, "done") == 0)   return cmd_done(&st, ac, av);
+    if (strcmp(cmd, "review") == 0) return cmd_review(&st, ac, av);
+    if (strcmp(cmd, "cards") == 0)  return cmd_cards(&st, ac, av);
+    if (strcmp(cmd, "edit") == 0)   return cmd_edit(&st, ac, av);
     if (strcmp(cmd, "pace") == 0)   return cmd_pace(&st, ac, av);
     if (strcmp(cmd, "shelf") == 0)  return cmd_shelf(&st, ac, av);
     if (strcmp(cmd, "graph") == 0)  return cmd_graph(&st, ac, av);

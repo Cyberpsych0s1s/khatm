@@ -64,6 +64,13 @@ static void parse_meta(Book *bk, char *line, time_t now) {
     }
 }
 
+/* FNV-1a (32-bit): stable identity for a card from its front text. */
+static unsigned fnv1a(const char *s) {
+    unsigned h = 2166136261u;
+    for (; *s; s++) { h ^= (unsigned char)*s; h *= 16777619u; }
+    return h;
+}
+
 static int parse_book(State *st, const char *path, const char *stem) {
     FILE *f = fopen(path, "r");
     if (!f) return -1;
@@ -75,7 +82,7 @@ static int parse_book(State *st, const char *path, const char *stem) {
     if (stat(path, &sb) == 0) bk.mtime = sb.st_mtime;
 
     char line[1024];
-    int cur_sec = -1;
+    int cur_sec = -1, cur_ch = -1;
     while (fgets(line, sizeof line, f)) {
         char *s = trim(line);
         if (!*s) continue;
@@ -103,6 +110,21 @@ static int parse_book(State *st, const char *path, const char *stem) {
             ch.title = xstrdup(trim(t));
             if (ch.done_in_file) ch.done_at = bk.mtime ? bk.mtime : 1;
             *VPUSH(bk.chs, bk.nchs, bk.cchs) = ch;
+            cur_ch = bk.nchs - 1;
+        } else if (s[0] == '?') {
+            /* `? front :: back`   a review card under the current chapter */
+            char *sep = strstr(s, "::");
+            if (cur_ch < 0 || !sep) continue;
+            *sep = 0;
+            char *front = trim(s + 1), *back = trim(sep + 2);
+            if (!*front || !*back) continue;
+            Card cd = {0};
+            cd.front = xstrdup(front);
+            cd.back  = xstrdup(back);
+            cd.id    = fnv1a(front);
+            cd.ef    = 2.5;
+            Chapter *cc = &bk.chs[cur_ch];
+            *VPUSH(cc->cards, cc->ncards, cc->ccards) = cd;
         }
     }
     fclose(f);

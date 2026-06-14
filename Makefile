@@ -4,6 +4,7 @@ LDFLAGS ?=
 
 PREFIX  ?= /usr/local
 BINDIR  ?= $(PREFIX)/bin
+MANDIR  ?= $(PREFIX)/share/man/man1
 
 # Windows (MSYS2/MinGW make sets OS): name the binary khatm.exe.
 # Two sub-cases for the commands in clean/install:
@@ -21,6 +22,8 @@ INST_MKDIR = if not exist "$(INSTALLDIR)" mkdir "$(INSTALLDIR)"
 INST_COPY  = copy /y khatm.exe "$(INSTALLDIR)" >NUL
 INST_RM    = del /q /f "$(INSTALLDIR)\khatm.exe" 2>NUL
 INST_NOTE  = @echo if khatm is not found, add $(INSTALLDIR) to your PATH
+INST_MAN   = @echo man page not installed on native Windows
+INST_MANRM = @echo .
 else
 RMOBJ      = rm -f $(OBJ)
 RMBIN      = rm -f khatm khatm.exe
@@ -29,6 +32,8 @@ INST_MKDIR = mkdir -p "$(INSTALLDIR)"
 INST_COPY  = install -m 0755 khatm.exe "$(INSTALLDIR)/khatm.exe"
 INST_RM    = rm -f "$(INSTALLDIR)/khatm.exe"
 INST_NOTE  = @:
+INST_MAN   = @:
+INST_MANRM = @:
 endif
 else
 EXE   :=
@@ -39,10 +44,12 @@ INST_MKDIR = install -d "$(INSTALLDIR)"
 INST_COPY  = install -m 0755 khatm "$(INSTALLDIR)/khatm"
 INST_RM    = rm -f "$(INSTALLDIR)/khatm"
 INST_NOTE  = @:
+INST_MAN   = install -d "$(DESTDIR)$(MANDIR)" && install -m 0644 man/khatm.1 "$(DESTDIR)$(MANDIR)/khatm.1"
+INST_MANRM = rm -f "$(DESTDIR)$(MANDIR)/khatm.1"
 endif
 
 SRC := src/plat.c src/util.c src/syl.c src/log.c src/plan.c src/pace.c \
-       src/ui.c src/cmd.c src/tui.c src/api.c src/main.c
+       src/ui.c src/cmd.c src/tui.c src/api.c src/cere.c src/srs.c src/main.c
 OBJ := $(SRC:.c=.o)
 
 khatm$(EXE): $(OBJ)
@@ -61,10 +68,12 @@ test: khatm$(EXE)
 install: khatm$(EXE)
 	$(INST_MKDIR)
 	$(INST_COPY)
+	$(INST_MAN)
 	@echo installed: $(INSTALLDIR)
 	$(INST_NOTE)
 
 uninstall:
 	-$(INST_RM)
+	-$(INST_MANRM)
 
 .PHONY: clean test install uninstall

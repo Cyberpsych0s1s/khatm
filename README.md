@@ -16,7 +16,16 @@ Finish a whole book and that's a khatma, it goes on your shelf.
 
 ## Preview
 
+![sealing the last chapter of a book — the khatma](assets/demo.gif)
+
+<sub>Reproducible: `vhs assets/demo/demo.tape` re-records this GIF (see
+[`assets/demo/`](assets/demo)).</sub>
+
+<details><summary>Full TUI walkthrough (video)</summary>
+
 https://github.com/user-attachments/assets/8e32cca6-0a04-4036-9cd3-61aec204e670
+
+</details>
 
 ## Build
 
@@ -25,8 +34,13 @@ Linux and macOS:
 ```sh
 make            # produces ./khatm
 make test       # smoke suite
-make install    # /usr/local/bin (PREFIX=~/.local for per-user)
+make install    # /usr/local/bin + man page (PREFIX=~/.local for per-user)
 ```
+
+Shell completions live in [`completions/`](completions) (bash, zsh, fish) —
+source the one for your shell, or drop it in the usual place
+(`/etc/bash_completion.d/`, your `$fpath`, `~/.config/fish/completions/`).
+`man khatm` works after `make install`.
 
 Windows, native (MSYS2 UCRT64 or any MinGW-w64 gcc): same thing with
 `make CC=gcc`.
@@ -45,10 +59,15 @@ everything manually in the terminal is hell...
 
 ```sh
 ./khatm book new ostep "OSTEP"  # start a syllabus
+./khatm edit ostep              # open the book's .md in $EDITOR
 ./khatm next                    # what to study, and why
 ./khatm study ostep/1           # timed session
-./khatm done ostep/1            # seal the chapter
+./khatm done ostep/1            # seal the chapter (plays the ceremony)
 ```
+
+Sealing plays a short seal-stamp ceremony; the last chapter of a book blooms
+into the khatma and slides onto your shelf. `KHATM_ANIM=0` turns it off, and
+`KHATM_ROMAN=1` swaps the Arabic mark for a roman one if your font mangles it.
 
 ## Syllabus format
 
@@ -62,6 +81,7 @@ meta: deadline=2026-08-30 pages=650
 
 ## Virtualization
 - [ ] Processes ~18p
+  ? what does fork() return :: 0 in the child, the child pid in the parent
 - [ ] Process API ~14p
 
 ## Concurrency [needs: Virtualization]
@@ -74,7 +94,23 @@ meta: deadline=2026-08-30 pages=650
 - `[needs: ...]` are prerequisites: a chapter number, a section title, a
   title substring, or `book/ref` across books. Sections pass their needs to
   every chapter inside.
+- `? front :: back` lines under a chapter are spaced-review cards (see below).
 - Checking `[x]` by hand counts as done; `khatm done` is better (it's dated).
+
+## Spaced review
+
+Drop `? front :: back` lines under any chapter and they become flashcards.
+A card unlocks for review only once you **seal its chapter** — you revise
+what you've actually finished. Reviews are scheduled with SM-2.
+
+```sh
+khatm review           # grade due cards: [a]gain [h]ard [g]ood [e]asy
+khatm cards            # every card and when it next falls due
+```
+
+The schedule lives entirely in the append-only log (`review` events keyed by
+a hash of the card front), so the `.md` is never rewritten — reorder or
+re-indent cards freely and their history follows.
 
 Everything khatm writes goes to one append-only log, `<root>/log.txt`.
 State is rebuilt from plain text on every load, so grep it, back it up,

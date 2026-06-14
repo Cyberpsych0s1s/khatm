@@ -1,0 +1,40 @@
+#compdef khatm
+# zsh completion for khatm
+# install: put this file (named _khatm) on your $fpath, e.g.
+#   ~/.zsh/completions, then `autoload -U compinit && compinit`
+_khatm() {
+    local -a cmds
+    cmds=(
+        'init:prepare the data directory'
+        'books:list every book with progress'
+        'status:today, streak, promises'
+        'next:what to study, and why'
+        'study:timed session'
+        'log:record a session manually'
+        'book:create or extend a syllabus'
+        'goal:make or drop a promise'
+        'done:seal a chapter'
+        'review:spaced review of due cards'
+        'cards:list cards and due dates'
+        'edit:open a book in $EDITOR'
+        'pace:burndown and required pace'
+        'shelf:books you have sealed'
+        'graph:session heatmap'
+        'doctor:cycles, stale promises, bias'
+        'dump:full state as JSON'
+        'help:usage'
+    )
+    if (( CURRENT == 2 )); then
+        _describe -t commands 'khatm command' cmds
+        return
+    fi
+
+    local root=${KHATM_DIR:-$HOME/.khatm}
+    local -a ids
+    ids=(${(f)"$(cd $root/books 2>/dev/null && ls -1 *.md 2>/dev/null | sed 's/\.md$//')"})
+    case $words[2] in
+        study|log|done|goal|review|cards|edit|pace|book)
+            _describe -t books 'book' ids ;;
+    esac
+}
+_khatm "$@"

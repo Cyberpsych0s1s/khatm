@@ -271,6 +271,14 @@ static void d_home(UI *ui) {
     }
     row++;
 
+    int due = cards_due_count(st, -1);
+    if (due > 0) {
+        omove(row++, 1);
+        op("   %s✦ %d card%s due for review%s   %s[r] review%s\033[K",
+           fg(P_GOLDHI), due, due == 1 ? "" : "s", TR, fg(P_FAINT), TR);
+        row++;
+    }
+
     int idx[32];
     int n = open_goal_idx(st, idx, 32);
     omove(row++, 1);
@@ -661,11 +669,11 @@ static void draw_frame(UI *ui) {
     }
 
     static const char *hints[6] = {
-        "[enter] study   [p] pomodoro   [d] seal   [g] promise   [?] help   [q] quit",
+        "[enter] study   [d] seal   [r] review   [g] promise   [?] help   [q] quit",
         "[↑↓] select   [enter] chapters   [n] new book   [a] add chapter   [g] promise",
         "[↑↓] select   [enter] study   [p] pomodoro   [d] seal   [g] promise   [a] add",
         "[↑↓] select   [d] drop promise   [1-4] views   [q] quit",
-        "[1-4] views   [q] quit",
+        "[r] review   [1-4] views   [q] quit",
         "[enter] finish session   [esc] discard",
     };
     d_footer(ui, hints[ui->view]);
@@ -749,6 +757,17 @@ static void act_seal(UI *ui, Ref r) {
         return;
     }
 
+    Book *bk = &st->books[r.book];
+    int done = 0;
+    for (int c = 0; c < bk->nchs; c++)
+        if (bk->chs[c].done_at) done++;
+    int complete = (done == bk->nchs);
+
+    if (cere_should_play()) {
+        oflush();                         /* commit any pending frame first */
+        cere_play(st, r, complete, 0);    /* cinematic, into the TUI screen */
+        if (complete) ui->view = V_STATS;
+    } else {
     int n = 0;
     snprintf(lines[n++], 160, "%s✦  S E A L E D  ✦%s", TB, TR);
     snprintf(lines[n++], 160, "%s", fit(ch->title, 50));
@@ -775,15 +794,11 @@ static void act_seal(UI *ui, Ref r) {
             break;
         }
     }
-    Book *bk = &st->books[r.book];
-    int done = 0;
-    for (int c = 0; c < bk->nchs; c++)
-        if (bk->chs[c].done_at) done++;
     snprintf(lines[n++], 160, "%s %d/%d",
              sbar(book_progress(st, r.book), 20, P_TEAL), done, bk->nchs);
     ui_modal(ui, lines, n, P_GOLD);
 
-    if (done == bk->nchs) {
+    if (complete) {
         double mins = 0;
         for (int i = 0; i < st->nsess; i++)
             if (st->sess[i].ch.book == r.book) mins += st->sess[i].minutes;
@@ -799,10 +814,89 @@ static void act_seal(UI *ui, Ref r) {
         ui_modal(ui, lines, n, P_GOLD);
         ui->view = V_STATS;
     }
+    }
     int k, m;
     double rate = kept_rate(st, &k, &m, NULL);
     if (rate >= 0)
         toastf(ui, P_SAGE, "your word, kept: %.0f%% of %d", rate * 100, k + m);
+}
+
+typedef struct RevCard { Ref ch; Card *c; } RevCard;
+
+static void rev_center(UI *ui, int row, const char *color, const char *s) {
+    omove(row, 1);
+    int pad = (ui->w - dlen(s)) / 2;
+    if (pad < 1) pad = 1;
+    op("%*s%s%s%s\033[K", pad, "", color, s, TR);
+}
+
+/* In-app spaced review: front -> reveal -> grade, mirroring `khatm review`.
+ * Reuses srs_apply/ev_review via the same event path the CLI writes. */
+static void act_review(UI *ui) {
+    State *st = ui->st;
+    RevCard *q = NULL; int n = 0, cap = 0;
+    for (int b = 0; b < st->nbooks; b++)
+        for (int c = 0; c < st->books[b].nchs; c++) {
+            if (!st->books[b].chs[c].done_at) continue;
+            Chapter *ch = &st->books[b].chs[c];
+            for (int kk = 0; kk < ch->ncards; kk++)
+                if (card_due(st, &ch->cards[kk])) {
+                    RevCard *d = VPUSH(q, n, cap);
+                    d->ch = (Ref){ b, c };
+                    d->c  = &ch->cards[kk];
+                }
+        }
+    if (!n) { toastf(ui, P_MUT, "nothing due to review"); free(q); return; }
+
+    int i = 0, revealed = 0, done = 0, guard = n * 6 + 10;
+    while (i < n) {
+        plat_winsize(&ui->w, &ui->h);
+        Card *cd = q[i].c;
+        olen = 0;
+        op("\033[H\033[2J");
+        d_header(ui);
+        d_tabs(ui);
+        int row = ui->h / 2 - 4;
+        if (row < 7) row = 7;
+        char lbl[32];
+        snprintf(lbl, sizeof lbl, "card %d of %d", i + 1, n);
+        rev_center(ui, row, fg(P_FAINT), lbl);
+        rev_center(ui, row + 2, TB, fit(cd->front, ui->w - 8));
+        if (revealed) {
+            rev_center(ui, row + 4, fg(P_FAINT), "·  ·  ·");
+            rev_center(ui, row + 6, fg(P_SAGE), fit(cd->back, ui->w - 8));
+        }
+        d_footer(ui, revealed
+            ? "[a]gain   [h]ard   [g]ood   [e]asy      [q] quit"
+            : "[space/enter] reveal      [q] quit");
+        oflush();
+
+        int k = plat_read_key(60000);
+        if (k < 0) continue;
+        if (k == 'q' || k == 'Q' || k == K_ESC) break;
+        if (!revealed) {
+            if (k == K_ENTER || k == ' ') revealed = 1;
+            continue;
+        }
+        int g = -1;
+        if (k == 'a' || k == 'A' || k == '1') g = 0;
+        else if (k == 'h' || k == 'H' || k == '2') g = 1;
+        else if (k == 'g' || k == 'G' || k == '3' || k == K_ENTER || k == ' ') g = 2;
+        else if (k == 'e' || k == 'E' || k == '4') g = 3;
+        if (g < 0) continue;
+        Ref chref = q[i].ch;
+        ev_review(st, chref, cd, g);
+        done++;
+        if (g == 0 && n < guard) {       /* again: requeue this session */
+            RevCard *d = VPUSH(q, n, cap);
+            d->ch = chref; d->c = cd;
+        }
+        revealed = 0;
+        i++;
+    }
+    free(q);
+    toastf(ui, P_SAGE, "reviewed %d   %d still due",
+           done, cards_due_count(st, -1));
 }
 
 static void act_goal(UI *ui, Ref target) {
@@ -1055,6 +1149,7 @@ int tui_run(State *st) {
         switch (k) {
         case 'q': ui.quit = 1; break;
         case '?': show_help(&ui); break;
+        case 'r': act_review(&ui); break;
         case '1': case '2': case '3': case '4':
             ui.view = tab_view(k - '1');
             break;

@@ -115,6 +115,9 @@ int plat_stdin_tty(void) {
     return _isatty(0);
 }
 
+void plat_sleep_ms(int ms) { if (ms > 0) Sleep((DWORD)ms); }
+int  plat_utf8(void) { return 1; }   /* SetConsoleOutputCP(CP_UTF8) above */
+
 int plat_wait_enter(int timeout_ms) {
     /* no console: nothing interactive can arrive   end the session
      * rather than risk blocking on a pipe forever */
@@ -152,6 +155,7 @@ const char *plat_home(void) {
 #include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <termios.h>
+#include <time.h>
 #include <unistd.h>
 
 static struct termios saved_tio;
@@ -244,6 +248,21 @@ int plat_mkdir(const char *path) {
 
 int plat_stdin_tty(void) {
     return isatty(0);
+}
+
+void plat_sleep_ms(int ms) {
+    if (ms <= 0) return;
+    struct timespec ts = { ms / 1000, (long)(ms % 1000) * 1000000L };
+    nanosleep(&ts, NULL);
+}
+
+int plat_utf8(void) {
+    const char *v = getenv("LC_ALL");
+    if (!v || !*v) v = getenv("LC_CTYPE");
+    if (!v || !*v) v = getenv("LANG");
+    if (!v || !*v) return 0;
+    return strstr(v, "UTF-8") || strstr(v, "utf-8") ||
+           strstr(v, "UTF8")  || strstr(v, "utf8");
 }
 
 int plat_wait_enter(int timeout_ms) {

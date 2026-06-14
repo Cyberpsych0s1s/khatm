@@ -106,6 +106,13 @@ for c in 2 3 4 5 6 7; do "$BIN" done "knr/$c" -q >/dev/null 2>&1; done
 run "khatma fires on last seal" "K H A T M A"          -- done knr/8
 run "shelf shows the spine"    "1 book sealed"         -- shelf
 
+# spaced-review cards: the sample ships 3, and every chapter is now sealed
+run "cards listed by front"     "dangling pointer"     -- cards
+run "all cards due once sealed"  "3 due"               -- cards
+run "review counts due (json)"   '"due":3'             -- review --json
+run "review needs a tty"         "3 cards due"         -- review
+run "dump carries cards_due"     '"cards_due":3'       -- books --json
+
 # state survives reload (fold of the log)
 run "state persists"           "8/8"                   -- books
 

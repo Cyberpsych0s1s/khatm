@@ -1,0 +1,172 @@
+.\" khatm   manual page
+.TH KHATM 1 "2026-06-14" "khatm" "User Commands"
+.SH NAME
+khatm \- seal your books, chapter by chapter
+.SH SYNOPSIS
+.B khatm
+.RI [ command ]
+.RI [ args ...]
+.RB [ --json ]
+.SH DESCRIPTION
+.B khatm
+is a terminal study tracker. Each book is a markdown checklist; khatm tracks
+what is done, what to study next (dependency- and deadline-aware), how fast
+you are actually going, and whether you will hit the deadlines you set. Finish
+a whole book and that is a
+.IR khatma :
+its spine goes on your shelf.
+.PP
+Run with no arguments in a terminal,
+.B khatm
+opens an interactive TUI. Every command also works headless, and mutating
+commands accept
+.B --json
+for scripting.
+.PP
+All state is plain text: one markdown file per book plus a single append-only
+log. khatm only creates files and appends lines   it never rewrites what you
+wrote, so hand-editing is safe and the data is yours to grep, back up, or
+version with git.
+.SH COMMANDS
+.TP
+.B init
+Prepare the data directory and write a sample syllabus.
+.TP
+.B books
+List every book with its progress.
+.TP
+.B status
+Today's summary: streak, open promises, and what to study.
+.TP
+.B next
+The dependency- and deadline-aware suggestion for what to study, with reasons.
+.TP
+.BI "study " chapter
+A timed session (Enter stops it). With
+.B --pomo
+.RI [ work / break ]
+run pomodoro intervals; only focused minutes are logged.
+.TP
+.BI "log " "chapter duration"
+Record a session manually.
+.RB [ --pages
+.IR N ]
+.RB [ --date
+.IR D ].
+.TP
+.BI "book new " "id " [ title ]
+Start a syllabus.
+.RB [ --pages
+.IR N ]
+.RB [ --deadline
+.IR D ].
+Also:
+.BI "book add " "id title"
+and
+.BI "book section " "id title" .
+.TP
+.BI "goal " "target " --by " when"
+Make a promise; it is priced against your recent pace before you commit.
+.B goal
+alone lists open promises;
+.B goal --drop
+.I target
+drops one.
+.TP
+.BI "done " chapter
+Seal a chapter   the ceremony. The last chapter of a book triggers the khatma.
+.TP
+.B review
+.RI [ book ]
+Spaced review of due cards. Cards become reviewable once their chapter is
+sealed; grading uses SM-2.
+.TP
+.B cards
+.RI [ book ]
+List review cards and when each next falls due.
+.TP
+.B edit
+.RI [ book ]
+Open a book's markdown file (or the books directory) in
+.B $VISUAL
+or
+.BR $EDITOR .
+.TP
+.B pace
+.RI [ book ]
+Burndown, ETA, and the pace required to hit your deadlines.
+.TP
+.B shelf
+Every book you have ever sealed.
+.TP
+.B graph
+.RI [ weeks ]
+A session heatmap.
+.TP
+.B doctor
+Dependency cycles, stale promises, and estimate bias.
+.TP
+.B dump
+The full state as one JSON object (api version 1).
+.SH SYLLABUS FORMAT
+One markdown file per book under
+.IR <root>/books/ .
+.PP
+.in +4n
+.EX
+# Operating Systems: Three Easy Pieces
+meta: deadline=2026-08-30 pages=650
+
+## Virtualization
+- [ ] Processes ~18p
+  ? what does fork() return :: 0 in child, child pid in parent
+- [ ] Thread API ~10p [needs: 1, otherbook/3]
+.EE
+.in
+.PP
+.B ~18p
+/
+.B ~2h
+/
+.B ~90m
+are optional estimates.
+.B [needs: ...]
+lists prerequisites (a chapter number, a section title, a title substring, or
+.IR book/ref ).
+.B "? front :: back"
+lines under a chapter are spaced-review cards.
+.SH ENVIRONMENT
+.TP
+.B KHATM_DIR
+Data directory (default
+.IR ~/.khatm ).
+.TP
+.B EDITOR ", " VISUAL
+Editor for
+.BR "khatm edit" .
+.TP
+.B NO_COLOR
+Disable colour.
+.TP
+.B KHATM_ANIM
+Set to
+.B 0
+to disable the seal ceremony animation.
+.TP
+.B KHATM_ROMAN
+Render the seal mark in roman letters instead of Arabic.
+.SH FILES
+.TP
+.I <root>/books/*.md
+One markdown syllabus per book.
+.TP
+.I <root>/log.txt
+The append-only event log; all state is rebuilt from it on load.
+.SH EXIT STATUS
+0 on success, nonzero on error. With
+.BR --json ,
+failures print
+.B {"ok":false,...}
+and exit nonzero.
+.SH SEE ALSO
+The project README for the full syllabus and scripting reference.

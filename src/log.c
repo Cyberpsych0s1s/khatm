@@ -119,6 +119,20 @@ int log_load(State *st) {
             if (!deadline) continue;
             Goal g = { at, deadline, r, GOAL_OPEN, 0 };
             *VPUSH(st->goals, st->ngoals, st->cgoals) = g;
+        } else if (strcmp(ev, "review") == 0) {
+            if (parse_ref(st, target, &r) || r.ch < 0) continue;
+            char cb[32];
+            if (!kv_str(s, "card", cb, sizeof cb)) continue;
+            unsigned id = (unsigned)strtoul(cb, NULL, 16);
+            int grade = (int)kv_num(s, "g", -1);
+            if (grade < 0) continue;
+            /* chronological log => folding in read order replays SM-2 */
+            Chapter *ch = &st->books[r.book].chs[r.ch];
+            for (int k = 0; k < ch->ncards; k++)
+                if (ch->cards[k].id == id) {
+                    srs_apply(&ch->cards[k], grade, at);
+                    break;
+                }
         } else if (strcmp(ev, "drop-goal") == 0) {
             if (parse_ref(st, target, &r)) continue;
             /* set= identifies the exact goal by its set_at timestamp.

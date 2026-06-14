@@ -113,6 +113,15 @@ static void j_chapter(State *st, int b, int c, time_t implied) {
     }
     putchar(']');
     putchar(','); jkey("implied_due"); jdate(ch->done_at ? 0 : implied);
+    putchar(','); jkey("cards"); printf("%d", ch->ncards);
+    putchar(','); jkey("cards_due");
+    {
+        int cd = 0;
+        if (ch->done_at)
+            for (int i = 0; i < ch->ncards; i++)
+                if (card_due(st, &ch->cards[i])) cd++;
+        printf("%d", cd);
+    }
     putchar('}');
 }
 
@@ -187,6 +196,7 @@ int cmd_dump(State *st, int argc, char **argv) {
     putchar(','); jkey("kept_rate");
     if (rate >= 0) printf("%.4f", rate);
     else fputs("null", stdout);
+    putchar(','); jkey("cards_due"); printf("%d", cards_due_count(st, -1));
     putchar('}');
 
     putchar(','); jkey("suggestions"); putchar('[');

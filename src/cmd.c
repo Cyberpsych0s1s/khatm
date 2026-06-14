@@ -159,12 +159,15 @@ static const char SAMPLE_BOOK[] =
 "\n"
 "## Basics\n"
 "- [ ] A Tutorial Introduction ~30p\n"
+"  ? how do you print text in C :: printf from <stdio.h>\n"
+"  ? what does main return :: an int, the process exit status\n"
 "- [ ] Types, Operators and Expressions ~22p\n"
 "- [ ] Control Flow ~14p\n"
 "\n"
 "## The Core [needs: Basics]\n"
 "- [ ] Functions and Program Structure ~24p\n"
 "- [ ] Pointers and Arrays ~30p\n"
+"  ? what is a dangling pointer :: a pointer to memory that was freed\n"
 "- [ ] Structures ~24p\n"
 "\n"
 "## The Rest\n"
@@ -718,6 +721,15 @@ int cmd_done(State *st, int argc, char **argv) {
         return 1;
     }
     if (g_json) return api_done_json(st, r, 0);
+
+    Book *bk = &st->books[r.book];
+    int all = 1;
+    for (int c = 0; c < bk->nchs; c++)
+        if (!bk->chs[c].done_at) { all = 0; break; }
+
+    if (!quiet && cere_should_play())
+        cere_play(st, r, all, 1);   /* the cinematic; the receipt below persists */
+
     ui_seal(st, r, quiet);
 
     char d[32];
@@ -732,12 +744,38 @@ int cmd_done(State *st, int argc, char **argv) {
     }
     show_kept_rate(st);
 
-    Book *bk = &st->books[r.book];
-    int all = 1;
-    for (int c = 0; c < bk->nchs; c++)
-        if (!bk->chs[c].done_at) { all = 0; break; }
     if (all) ui_khatma(st, r.book);
     return 0;
+}
+
+int cmd_edit(State *st, int argc, char **argv) {
+    char path[1024];
+    if (argc >= 1) {
+        Ref r;
+        if (resolve_target(st, argv[0], &r, 1)) return 1;
+        snprintf(path, sizeof path, "%s", st->books[r.book].path);
+    } else {
+        snprintf(path, sizeof path, "%s/books", st->root);
+    }
+    /* the path is built from $KHATM_DIR/$HOME and an id-checked book id, but
+     * guard the few chars that would break the quoted shell word anyway */
+    if (strpbrk(path, "\"`$\n")) {
+        fprintf(stderr, "khatm: refusing to edit a path with shell-unsafe "
+                        "characters: %s\n", path);
+        return 1;
+    }
+    const char *ed = getenv("VISUAL");
+    if (!ed || !*ed) ed = getenv("EDITOR");
+    if (!ed || !*ed)
+#ifdef _WIN32
+        ed = "notepad";
+#else
+        ed = "vi";
+#endif
+    char cmd[2048];
+    snprintf(cmd, sizeof cmd, "%s \"%s\"", ed, path);
+    int rc = system(cmd);
+    return rc == 0 ? 0 : 1;
 }
 
 int cmd_pace(State *st, int argc, char **argv) {

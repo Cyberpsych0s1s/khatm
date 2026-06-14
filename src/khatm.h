@@ -49,6 +49,22 @@ typedef struct Section {
     char **needs_raw; int nneeds_raw, cneeds_raw;
 } Section;
 
+/* A spaced-review card: `? front :: back` inline under a chapter in the .md.
+ * The SRS fields below are not stored in the file   they are folded from the
+ * append-only `review` log events at load (SM-2). `id` (FNV-1a of front) is
+ * the card's identity in the log, so reordering or re-indenting cards in the
+ * .md keeps their history; only editing the front text resets a card. */
+typedef struct Card {
+    char    *front, *back;
+    unsigned id;
+    int      reps;          /* successful reps in a row */
+    double   ef;            /* ease factor, >= 1.3 */
+    int      interval;      /* days from last_review to due */
+    time_t   last_review;
+    time_t   due;
+    int      seen;          /* 0 = new (never reviewed) */
+} Card;
+
 typedef struct Chapter {
     char  *title;
     int    section;
@@ -57,6 +73,7 @@ typedef struct Chapter {
     int    done_in_file;
     char **needs_raw; int nneeds_raw, cneeds_raw;
     Ref   *needs;     int nneeds, cneeds;
+    Card  *cards;     int ncards, ccards;
     double minutes, pages;
     time_t done_at;
     time_t last_session;
@@ -176,6 +193,15 @@ void ui_khatma(State *st, int b);
 void ui_shelf(State *st);
 void ui_heatmap(State *st, int weeks);
 
+/* The ceremony: the cinematic seal-stamp reveal on `khatm done`. A transient
+ * alt-screen animation, so the textual receipt printed afterwards still lands
+ * in the scrollback. should_play() gates on tty + colour + UTF-8 + !json +
+ * KHATM_ANIM != 0 + terminal size; when it says no, only the static UI runs. */
+int  cere_should_play(void);
+/* own_screen: 1 from the CLI (enter/leave the alt screen here); 0 from the
+ * TUI, which is already in raw mode + alt screen and redraws afterwards. */
+void cere_play(State *st, Ref r, int book_complete, int own_screen);
+
 int cmd_init(State *st, int argc, char **argv);
 int cmd_book(State *st, int argc, char **argv);
 int cmd_books(State *st, int argc, char **argv);
@@ -189,6 +215,16 @@ int cmd_pace(State *st, int argc, char **argv);
 int cmd_shelf(State *st, int argc, char **argv);
 int cmd_graph(State *st, int argc, char **argv);
 int cmd_doctor(State *st, int argc, char **argv);
+int cmd_review(State *st, int argc, char **argv);
+int cmd_cards(State *st, int argc, char **argv);
+int cmd_edit(State *st, int argc, char **argv);
+
+/* SRS (spaced review). Cards are reviewable once their chapter is sealed.
+ * grade: 0 again · 1 hard · 2 good · 3 easy. */
+void srs_apply(Card *c, int grade, time_t when);  /* fold one review (SM-2) */
+int  card_due(State *st, Card *c);                 /* new cards are due now  */
+int  cards_due_count(State *st, int book);         /* book == -1: all books  */
+int  ev_review(State *st, Ref ch, Card *c, int grade);
 
 int  resolve_target(State *st, const char *arg, Ref *out, int allow_book);
 const char *ref_str(State *st, Ref r, char *buf, size_t n);

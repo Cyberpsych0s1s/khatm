@@ -26,6 +26,9 @@ int  plat_mkdir(const char *path);    /* 0 if created or exists      */
 const char *plat_home(void);          /* never NULL                  */
 int  plat_stdin_tty(void);            /* may we ask a question?      */
 
+void plat_sleep_ms(int ms);           /* animation frame timing      */
+int  plat_utf8(void);                 /* terminal likely renders UTF-8 */
+
 /* Cooked-mode wait used by the CLI pomodoro: block until Enter is
  * pressed or the timeout elapses. 1 = Enter, 0 = timeout, -1 = EOF. */
 int  plat_wait_enter(int timeout_ms);
