@@ -3,10 +3,8 @@
 <p align="center"><em>seal your books, chapter by chapter</em></p>
 
 <p align="center">
-  <img alt="C99, zero dependencies" src="https://img.shields.io/badge/C99-zero_dependencies-126e62?style=flat-square&logo=c&logoColor=white">
   <img alt="runs on linux, macOS, windows" src="https://img.shields.io/badge/runs_on-linux_·_macos_·_windows-126e62?style=flat-square">
   <img alt="TUI, CLI and JSON interfaces" src="https://img.shields.io/badge/interface-TUI_·_CLI_·_JSON-c9a227?style=flat-square">
-  <img alt="plain-text append-only data" src="https://img.shields.io/badge/data-plain_text,_append--only-c9a227?style=flat-square">
 </p>
 
 A little terminal app for tracking your reading/studying. Each book is a
