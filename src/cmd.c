@@ -174,10 +174,20 @@ static const char SAMPLE_BOOK[] =
 "- [ ] Input and Output ~20p [needs: 4]\n"
 "- [ ] The UNIX System Interface ~20p [needs: 4]\n";
 
+/* mkdir -p over '/'   the XDG default (~/.local/share/khatm) may have missing
+ * parents. plat_mkdir is a no-op when the dir already exists. */
+static int mkdir_p(const char *path) {
+    char buf[1024];
+    snprintf(buf, sizeof buf, "%s", path);
+    for (char *p = buf + 1; *p; p++)
+        if (*p == '/') { *p = 0; plat_mkdir(buf); *p = '/'; }
+    return plat_mkdir(buf);
+}
+
 int cmd_init(State *st, int argc, char **argv) {
     (void)argc; (void)argv;
     char path[1024];
-    if (plat_mkdir(st->root)) {
+    if (mkdir_p(st->root)) {
         fprintf(stderr, "khatm: cannot create %s\n", st->root);
         return 1;
     }
@@ -315,15 +325,27 @@ int cmd_book(State *st, int argc, char **argv) {
     return 1;
 }
 
+int book_has_tag(Book *bk, const char *tag) {
+    for (int i = 0; i < bk->ntags; i++)
+        if (ieq(bk->tags[i], tag)) return 1;
+    return 0;
+}
+
 int cmd_books(State *st, int argc, char **argv) {
-    (void)argc; (void)argv;
+    const char *filter = NULL;
+    for (int i = 0; i < argc; i++)
+        if (strcmp(argv[i], "--tag") == 0 && i + 1 < argc) filter = argv[++i];
+
     if (!st->nbooks) {
         printf("  no books yet   drop a syllabus in %s/books/\n", st->root);
         return 0;
     }
     printf("\n");
+    int shown = 0;
     for (int b = 0; b < st->nbooks; b++) {
         Book *bk = &st->books[b];
+        if (filter && !book_has_tag(bk, filter)) continue;
+        shown++;
         int done = 0;
         for (int c = 0; c < bk->nchs; c++)
             if (bk->chs[c].done_at) done++;
@@ -337,8 +359,39 @@ int cmd_books(State *st, int argc, char **argv) {
             printf("  %sdue %s (%dd)%s",
                    left < 7 ? CYELLOW : CDIM, d, left, CRESET);
         }
+        for (int t = 0; t < bk->ntags; t++)
+            printf("  %s#%s%s", CDIM, bk->tags[t], CRESET);
         printf("\n");
     }
+    if (filter && !shown)
+        printf("  no books tagged #%s\n", filter);
+    printf("\n");
+    return 0;
+}
+
+int cmd_tags(State *st, int argc, char **argv) {
+    (void)argc; (void)argv;
+    char *names[256];
+    int counts[256], n = 0;
+    for (int b = 0; b < st->nbooks; b++)
+        for (int i = 0; i < st->books[b].ntags; i++) {
+            char *tg = st->books[b].tags[i];
+            int j = 0;
+            while (j < n && !ieq(names[j], tg)) j++;
+            if (j == n) {
+                if (n >= 256) continue;
+                names[n] = tg; counts[n] = 0; n++;
+            }
+            counts[j]++;
+        }
+    if (!n) {
+        printf("  no tags yet   add `meta: tags=os,systems` to a book\n");
+        return 0;
+    }
+    printf("\n");
+    for (int j = 0; j < n; j++)
+        printf("  %s#%-16s%s %d book%s\n", CCYAN, names[j], CRESET,
+               counts[j], counts[j] == 1 ? "" : "s");
     printf("\n");
     return 0;
 }
@@ -823,6 +876,50 @@ int cmd_pace(State *st, int argc, char **argv) {
             printf("  no recent sessions   log one and pace appears.\n");
         }
     }
+
+    /* Reality check: the per-book lines above each assume your whole pace is
+     * spent on that one book. You have ONE pace. Schedule every deadlined book
+     * earliest-first against a single worker and see which deadlines actually
+     * survive   the honest forecast no per-book number can give you. */
+    if (argc == 0 && st->nbooks > 1) {
+        double vp = velocity_pages(st, -1, 28);
+        int order[128], n = 0;
+        for (int b = 0; b < st->nbooks && n < 128; b++)
+            if (st->books[b].deadline && book_remaining_pages(st, b) > 0)
+                order[n++] = b;
+        for (int i = 1; i < n; i++)            /* by deadline, soonest first */
+            for (int j = i; j > 0 && st->books[order[j]].deadline <
+                                     st->books[order[j - 1]].deadline; j--) {
+                int t = order[j]; order[j] = order[j - 1]; order[j - 1] = t;
+            }
+        if (n >= 2 && vp > 0) {
+            printf("\n  %sall books, one pace (%.1f p/day, soonest "
+                   "deadline first):%s\n", CBOLD, vp, CRESET);
+            double cum = 0;            /* days the single worker has spent */
+            int late = 0;
+            char d[32];
+            for (int i = 0; i < n; i++) {
+                int b = order[i];
+                cum += book_remaining_pages(st, b) / vp;
+                time_t finish = st->now + (time_t)(cum * 86400 + 0.5);
+                int slack = days_between(finish, st->books[b].deadline);
+                fmt_date(st->books[b].deadline, d, sizeof d);
+                if (slack >= 0)
+                    printf("   %s✓%s %-22.22s by %s  %s%d day%s spare%s\n",
+                           CGREEN, CRESET, st->books[b].title, d,
+                           CDIM, slack, slack == 1 ? "" : "s", CRESET);
+                else {
+                    late = 1;
+                    printf("   %s✗%s %-22.22s by %s  %s%d day%s late%s\n",
+                           CRED, CRESET, st->books[b].title, d,
+                           CYELLOW, -slack, -slack == 1 ? "" : "s", CRESET);
+                }
+            }
+            if (late)
+                printf("   %syou can't keep every deadline at this pace — "
+                       "drop one or speed up%s\n", CYELLOW, CRESET);
+        }
+    }
     printf("\n");
     return 0;
 }
@@ -846,6 +943,10 @@ int cmd_status(State *st, int argc, char **argv) {
     if (s > 0) printf("   streak: %s%d day%s%s", CGREEN, s,
                       s == 1 ? "" : "s", CRESET);
     printf("\n");
+    int cdue = cards_due_count(st, -1);
+    if (cdue > 0)
+        printf("  %s%d card%s due for review%s   khatm review\n",
+               CCYAN, cdue, cdue == 1 ? "" : "s", CRESET);
     show_kept_rate(st);
 
     int any = 0;

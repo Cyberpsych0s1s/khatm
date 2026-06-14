@@ -33,7 +33,12 @@ version with git.
 Prepare the data directory and write a sample syllabus.
 .TP
 .B books
-List every book with its progress.
+.RI [ --tag " " t ]
+List every book with its progress, optionally only those tagged
+.IR t .
+.TP
+.B tags
+List the subjects (tags) across your books, with a book count each.
 .TP
 .B status
 Today's summary: streak, open promises, and what to study.
@@ -138,8 +143,10 @@ lines under a chapter are spaced-review cards.
 .SH ENVIRONMENT
 .TP
 .B KHATM_DIR
-Data directory (default
-.IR ~/.khatm ).
+Data directory. If unset, an existing
+.I ~/.khatm
+is used, otherwise
+.IR $XDG_DATA_HOME/khatm .
 .TP
 .B EDITOR ", " VISUAL
 Editor for
@@ -162,6 +169,10 @@ One markdown syllabus per book.
 .TP
 .I <root>/log.txt
 The append-only event log; all state is rebuilt from it on load.
+.TP
+.I <root>/hooks/{post-seal,post-khatma,post-goal}
+Optional executables run on those events (POSIX), with data in the environment
+.RB ( KHATM_EVENT ", " KHATM_ROOT ", " KHATM_BOOK ", " KHATM_REF ", " KHATM_CHAPTER ).
 .SH EXIT STATUS
 0 on success, nonzero on error. With
 .BR --json ,

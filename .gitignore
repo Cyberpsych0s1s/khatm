@@ -2,3 +2,9 @@ khatm
 khatm.exe
 src/*.o
 internal/
+fuzz_parse
+corpus/
+crash-*
+leak-*
+timeout-*
+oom-*

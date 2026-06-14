@@ -2,6 +2,13 @@ CC      ?= cc
 CFLAGS  ?= -std=c99 -O2 -Wall -Wextra -Wpedantic
 LDFLAGS ?=
 
+# `make SAN=1` builds with AddressSanitizer + UBSan for testing/CI.
+ifdef SAN
+SANFLAGS := -fsanitize=address,undefined -fno-omit-frame-pointer -g
+CFLAGS   += $(SANFLAGS)
+LDFLAGS  += $(SANFLAGS)
+endif
+
 PREFIX  ?= /usr/local
 BINDIR  ?= $(PREFIX)/bin
 MANDIR  ?= $(PREFIX)/share/man/man1
@@ -58,9 +65,19 @@ khatm$(EXE): $(OBJ)
 %.o: %.c src/khatm.h src/plat.h
 	$(CC) $(CFLAGS) -c -o $@ $<
 
+# Fuzzing: clang + libFuzzer over the syllabus and log parsers.
+#   make fuzz && ./fuzz_parse -max_total_time=30 corpus/
+FUZZCC  ?= clang
+FUZZSRC := $(filter-out src/main.c,$(SRC)) tests/fuzz_parse.c
+fuzz:
+	$(FUZZCC) -std=c99 -g -O1 -fsanitize=fuzzer,address,undefined \
+	    -Isrc -o fuzz_parse $(FUZZSRC)
+	@echo "run: ./fuzz_parse -max_total_time=30 corpus/"
+
 clean:
 	-$(RMBIN)
 	-$(RMOBJ)
+	-rm -f fuzz_parse
 
 test: khatm$(EXE)
 	bash tests/smoke.sh ./khatm$(EXE)
@@ -76,4 +93,4 @@ uninstall:
 	-$(INST_RM)
 	-$(INST_MANRM)
 
-.PHONY: clean test install uninstall
+.PHONY: clean test install uninstall fuzz

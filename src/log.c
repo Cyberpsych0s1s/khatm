@@ -1,5 +1,9 @@
 #define _POSIX_C_SOURCE 200809L
 #include "khatm.h"
+#ifndef _WIN32
+#include <unistd.h>
+#include <sys/wait.h>
+#endif
 
 const char *log_path(State *st, char *buf, size_t n) {
     if ((size_t)snprintf(buf, n, "%s/log.txt", st->root) >= n)
@@ -82,7 +86,14 @@ int log_load(State *st) {
     }
     FILE *f = fopen(p, "r");
     if (!f) return 0;
+    log_parse_stream(st, f);
+    fclose(f);
+    return 0;
+}
 
+/* Replay an open log stream into st (sessions/goals/cards). Exposed in
+ * khatm.h for the fuzz harness; the caller owns f. */
+void log_parse_stream(State *st, FILE *f) {
     char line[1024];
     while (fgets(line, sizeof line, f)) {
         char *s = trim(line);
@@ -152,7 +163,6 @@ int log_load(State *st) {
                 }
         }
     }
-    fclose(f);
 
     for (int i = 1; i < st->nsess; i++) {
         Session key = st->sess[i];
@@ -163,7 +173,6 @@ int log_load(State *st) {
         }
         st->sess[j + 1] = key;
     }
-    return 0;
 }
 
 const char *ref_str(State *st, Ref r, char *buf, size_t n) {
@@ -171,6 +180,37 @@ const char *ref_str(State *st, Ref r, char *buf, size_t n) {
     else snprintf(buf, n, "%s/%d", st->books[r.book].id, r.ch + 1);
     return buf;
 }
+
+/* Run $KHATM_DIR/hooks/<event> if it exists and is executable, git-style.
+ * Data is passed via the environment (KHATM_EVENT/ROOT/BOOK/REF/CHAPTER), so
+ * there is no shell and nothing to escape. POSIX only; a no-op on Windows. */
+#ifndef _WIN32
+static void run_hook(State *st, const char *event, Ref r) {
+    char path[768];
+    if ((size_t)snprintf(path, sizeof path, "%s/hooks/%s", st->root, event)
+        >= sizeof path) return;
+    if (access(path, X_OK) != 0) return;
+
+    char rb[256];
+    setenv("KHATM_EVENT", event, 1);
+    setenv("KHATM_ROOT", st->root, 1);
+    setenv("KHATM_BOOK", st->books[r.book].id, 1);
+    if (r.ch >= 0) {
+        setenv("KHATM_REF", ref_str(st, r, rb, sizeof rb), 1);
+        setenv("KHATM_CHAPTER", st->books[r.book].chs[r.ch].title, 1);
+    } else {
+        unsetenv("KHATM_REF");
+        unsetenv("KHATM_CHAPTER");
+    }
+    pid_t pid = fork();
+    if (pid == 0) { execl(path, event, (char *)NULL); _exit(127); }
+    if (pid > 0) { int s; waitpid(pid, &s, 0); }
+}
+#else
+static void run_hook(State *st, const char *event, Ref r) {
+    (void)st; (void)event; (void)r;   /* hooks are a POSIX feature */
+}
+#endif
 
 int ev_session(State *st, Ref r, double min, double pages, time_t when) {
     char ts[64], rb[256], line[512];
@@ -206,6 +246,13 @@ int ev_done(State *st, Ref r) {
     if (log_append(st, line)) return -1;
     st->books[r.book].chs[r.ch].done_at = st->now;
     goals_refresh(st);
+
+    run_hook(st, "post-seal", r);
+    Book *bk = &st->books[r.book];
+    int all = 1;
+    for (int c = 0; c < bk->nchs; c++)
+        if (!bk->chs[c].done_at) { all = 0; break; }
+    if (all) run_hook(st, "post-khatma", (Ref){ r.book, -1 });
     return 0;
 }
 
@@ -219,6 +266,7 @@ int ev_goal(State *st, Ref r, time_t by) {
     Goal g = { st->now, by, r, GOAL_OPEN, 0 };
     *VPUSH(st->goals, st->ngoals, st->cgoals) = g;
     goals_refresh(st);
+    run_hook(st, "post-goal", r);
     return 0;
 }
 

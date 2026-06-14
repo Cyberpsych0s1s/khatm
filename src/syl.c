@@ -58,6 +58,19 @@ static void parse_meta(Book *bk, char *line, time_t now) {
             } else if (ieq(tok, "id")) {
                 free(bk->id);
                 bk->id = xstrdup(val);
+            } else if (ieq(tok, "tags")) {
+                /* comma-separated; split by hand   the outer loop already
+                 * holds strtok's state, so don't nest strtok here */
+                const char *p = val;
+                while (*p) {
+                    const char *start = p;
+                    while (*p && *p != ',') p++;
+                    char *raw = xstrndup(start, (size_t)(p - start));
+                    char *t = trim(raw);
+                    if (*t) *VPUSH(bk->tags, bk->ntags, bk->ctags) = xstrdup(t);
+                    free(raw);
+                    if (*p == ',') p++;
+                }
             }
         }
         tok = strtok(NULL, " \t");
@@ -71,15 +84,17 @@ static unsigned fnv1a(const char *s) {
     return h;
 }
 
-static int parse_book(State *st, const char *path, const char *stem) {
-    FILE *f = fopen(path, "r");
-    if (!f) return -1;
-
+/* Parse an open syllabus stream into st->books. Exposed (declared in khatm.h)
+ * so the fuzz harness can drive the parser without touching the filesystem;
+ * path may be NULL (then no mtime). The caller owns f. */
+int syl_parse_stream(State *st, FILE *f, const char *path, const char *stem) {
     Book bk = {0};
     bk.id = xstrdup(stem);
-    bk.path = xstrdup(path);
-    struct stat sb;
-    if (stat(path, &sb) == 0) bk.mtime = sb.st_mtime;
+    bk.path = xstrdup(path ? path : "");
+    if (path) {
+        struct stat sb;
+        if (stat(path, &sb) == 0) bk.mtime = sb.st_mtime;
+    }
 
     char line[1024];
     int cur_sec = -1, cur_ch = -1;
@@ -127,16 +142,31 @@ static int parse_book(State *st, const char *path, const char *stem) {
             *VPUSH(cc->cards, cc->ncards, cc->ccards) = cd;
         }
     }
-    fclose(f);
 
     if (!bk.title) bk.title = xstrdup(stem);
     if (bk.nchs == 0) {
         free(bk.id); free(bk.title); free(bk.path);
+        for (int s = 0; s < bk.nsecs; s++) {       /* deep-free discarded secs */
+            free(bk.secs[s].title);
+            for (int i = 0; i < bk.secs[s].nneeds_raw; i++)
+                free(bk.secs[s].needs_raw[i]);
+            free(bk.secs[s].needs_raw);
+        }
+        for (int i = 0; i < bk.ntags; i++) free(bk.tags[i]);
+        free(bk.tags);
         free(bk.secs); free(bk.chs);
         return 0;
     }
     *VPUSH(st->books, st->nbooks, st->cbooks) = bk;
     return 0;
+}
+
+static int parse_book(State *st, const char *path, const char *stem) {
+    FILE *f = fopen(path, "r");
+    if (!f) return -1;
+    int rc = syl_parse_stream(st, f, path, stem);
+    fclose(f);
+    return rc;
 }
 
 int syl_load(State *st) {

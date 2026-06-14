@@ -43,6 +43,10 @@ source the one for your shell, or drop it in the usual place
 Windows, native (MSYS2 UCRT64 or any MinGW-w64 gcc): same thing with
 `make CC=gcc`.
 
+CI runs the smoke suite on Linux and macOS, again under ASan/UBSan
+(`make SAN=1`), plus a short libFuzzer pass over the syllabus and log parsers
+(`make fuzz`).
+
 ## Use
 
 ```sh
@@ -69,13 +73,14 @@ into the khatma and slides onto your shelf. `KHATM_ANIM=0` turns it off, and
 
 ## Syllabus format
 
-One markdown file per book in `<root>/books/` (default `~/.khatm`, or
-`$KHATM_DIR`). khatm only creates files or appends lines, it never rewrites
-what you wrote, so hand-editing stays safe.
+One markdown file per book in `<root>/books/`. The root is `$KHATM_DIR` if
+set, else an existing `~/.khatm`, else `$XDG_DATA_HOME/khatm` (i.e.
+`~/.local/share/khatm`). khatm only creates files or appends lines, it never
+rewrites what you wrote, so hand-editing stays safe.
 
 ```markdown
 # Operating Systems: Three Easy Pieces
-meta: deadline=2026-08-30 pages=650
+meta: deadline=2026-08-30 pages=650 tags=os,systems
 
 ## Virtualization
 - [ ] Processes ~18p
@@ -93,6 +98,8 @@ meta: deadline=2026-08-30 pages=650
   title substring, or `book/ref` across books. Sections pass their needs to
   every chapter inside.
 - `? front :: back` lines under a chapter are spaced-review cards (see below).
+- `tags=a,b` in `meta:` group books by subject (comma-separated, no spaces);
+  `khatm tags` lists them and `khatm books --tag a` filters.
 - Checking `[x]` by hand counts as done; `khatm done` is better (it's dated).
 
 ## Spaced review
@@ -113,6 +120,26 @@ re-indent cards freely and their history follows.
 Everything khatm writes goes to one append-only log, `<root>/log.txt`.
 State is rebuilt from plain text on every load, so grep it, back it up,
 sync it with git, whatever.
+
+## Pace and deadlines
+
+`khatm pace` shows each book's burndown and ETA at your real 4-week pace. Give
+it more than one deadline and it schedules them all against a *single* pace,
+soonest first, and tells you which deadlines you'll actually miss — because you
+only have one you. Honest by default; no per-book wishful thinking.
+
+## Hooks
+
+Drop an executable at `<root>/hooks/post-seal`, `post-khatma`, or `post-goal`
+and khatm runs it on that event (git-hook style, POSIX only). Data arrives in
+the environment — `KHATM_EVENT`, `KHATM_ROOT`, `KHATM_BOOK`, and for chapter
+events `KHATM_REF` / `KHATM_CHAPTER` — so there is no shell to escape.
+
+```sh
+#!/bin/sh
+# ~/.khatm/hooks/post-khatma   commit your progress on every finished book
+cd "$KHATM_ROOT" && git add -A && git commit -q -m "khatma: $KHATM_BOOK"
+```
 
 ## Scripting
 

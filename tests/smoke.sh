@@ -147,6 +147,39 @@ else
     fails=$((fails+1))
 fi
 
+# honest planner: two deadlined books share one pace, so pace cross-checks them
+"$BIN" book new pa "Planner A" --pages 100 --deadline +10d >/dev/null 2>&1
+"$BIN" book add pa "PA1" --est 100p >/dev/null 2>&1
+"$BIN" book new pb "Planner B" --pages 100 --deadline +12d >/dev/null 2>&1
+"$BIN" book add pb "PB1" --est 100p >/dev/null 2>&1
+"$BIN" log pa/1 30m --pages 5 >/dev/null 2>&1
+run "pace gives a combined forecast" "all books, one pace" -- pace
+
+# tags (subjects across books) and the review nudge in status
+printf '# Tagged Book\nmeta: tags=algo,cs\n## S\n- [ ] X ~5p\n' > "$DIR/books/tg.md"
+run "tags lists subjects"      "#algo"        -- tags
+run "books filter by tag"      "Tagged Book"  -- books --tag algo
+run "status nudges review"     "due for review" -- status
+
+# event hooks (POSIX only; a no-op on the native Windows build)
+case "$(uname -s 2>/dev/null)" in
+    MINGW*|MSYS*|CYGWIN*) ;;
+    *)
+        mkdir -p "$DIR/hooks"
+        printf '#!/bin/sh\necho "$KHATM_REF" > "$KHATM_ROOT/hooked"\n' \
+            > "$DIR/hooks/post-seal"
+        chmod +x "$DIR/hooks/post-seal"
+        "$BIN" book new hk "Hook Book" >/dev/null 2>&1
+        "$BIN" book add hk "C" --est 5p >/dev/null 2>&1
+        "$BIN" done hk/1 -q >/dev/null 2>&1
+        if [ "$(cat "$DIR/hooked" 2>/dev/null)" = "hk/1" ]; then
+            echo "ok   post-seal hook ran with KHATM_REF"
+        else
+            echo "FAIL post-seal hook"; fails=$((fails+1))
+        fi
+        ;;
+esac
+
 echo
 if [ "$fails" -eq 0 ]; then echo "all smoke tests passed"; else echo "$fails FAILED"; fi
 rm -rf "$DIR"

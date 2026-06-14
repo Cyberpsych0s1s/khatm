@@ -2,6 +2,30 @@
 #include "khatm.h"
 #include "plat.h"
 #include <unistd.h>
+#ifndef _WIN32
+#include <sys/stat.h>
+static int is_dir(const char *p) {
+    struct stat s;
+    return stat(p, &s) == 0 && S_ISDIR(s.st_mode);
+}
+#endif
+
+/* Default data dir when $KHATM_DIR is unset. An existing ~/.khatm always wins
+ * (don't strand anyone's data); otherwise new installs follow XDG. Windows
+ * keeps ~/.khatm. */
+static void resolve_default_root(char *buf, size_t n) {
+    const char *home = plat_home();
+#ifdef _WIN32
+    snprintf(buf, n, "%s/.khatm", home);
+#else
+    char legacy[512];
+    snprintf(legacy, sizeof legacy, "%s/.khatm", home);
+    const char *xdg = getenv("XDG_DATA_HOME");
+    if (is_dir(legacy))   snprintf(buf, n, "%s", legacy);
+    else if (xdg && *xdg) snprintf(buf, n, "%s/khatm", xdg);
+    else                  snprintf(buf, n, "%s/.local/share/khatm", home);
+#endif
+}
 
 static void usage(void) {
     printf(
@@ -9,7 +33,8 @@ static void usage(void) {
 "\n"
 "  khatm                         the TUI (default in a terminal)\n"
 "  khatm init                    prepare the data dir (default ~/.khatm)\n"
-"  khatm books                   every book with its progress\n"
+"  khatm books [--tag <t>]       every book with its progress\n"
+"  khatm tags                    subjects across your books, with counts\n"
 "  khatm status                  today, streak, promises, what to study\n"
 "  khatm next                    dependency- and deadline-aware: study this\n"
 "  khatm study <chapter>         timed session (Enter to stop)\n"
@@ -49,11 +74,10 @@ int main(int argc, char **argv) {
 
     const char *env = getenv("KHATM_DIR");
     char rootbuf[512];
-    if (env && *env) {
+    if (env && *env)
         snprintf(rootbuf, sizeof rootbuf, "%s", env);
-    } else {
-        snprintf(rootbuf, sizeof rootbuf, "%s/.khatm", plat_home());
-    }
+    else
+        resolve_default_root(rootbuf, sizeof rootbuf);
     st.root = rootbuf;
 
     int ac2 = 1;
@@ -112,6 +136,7 @@ int main(int argc, char **argv) {
 
     if (strcmp(cmd, "book") == 0)   return cmd_book(&st, ac, av);
     if (strcmp(cmd, "books") == 0)  return cmd_books(&st, ac, av);
+    if (strcmp(cmd, "tags") == 0)   return cmd_tags(&st, ac, av);
     if (strcmp(cmd, "status") == 0) return cmd_status(&st, ac, av);
     if (strcmp(cmd, "next") == 0)   return cmd_next(&st, ac, av);
     if (strcmp(cmd, "log") == 0)    return cmd_log(&st, ac, av);

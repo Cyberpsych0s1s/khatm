@@ -1,0 +1,5 @@
+# B
+meta: pages=10 deadline=2026-08-30
+## S [needs: 1]
+- [ ] C ~12p [needs: 2, x/3]
+  ? q :: a

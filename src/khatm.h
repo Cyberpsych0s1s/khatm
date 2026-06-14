@@ -88,6 +88,7 @@ typedef struct Book {
     time_t  mtime;
     Chapter *chs;  int nchs,  cchs;
     Section *secs; int nsecs, csecs;
+    char  **tags;  int ntags, ctags;   /* from `meta: tags=a,b` */
 } Book;
 
 enum { GOAL_OPEN, GOAL_KEPT, GOAL_MISSED, GOAL_DROPPED };
@@ -114,6 +115,10 @@ typedef struct State {
 } State;
 
 int  syl_load(State *st);
+/* Stream parsers, factored out so the fuzz harness can drive them in-process
+ * (path may be NULL). The caller owns the FILE. */
+int  syl_parse_stream(State *st, FILE *f, const char *path, const char *stem);
+void log_parse_stream(State *st, FILE *f);
 /* Syllabus writers (append-only   khatm never rewrites user lines).
  * They also update in-memory state. 0 ok; -1 with a message in err. */
 int  syl_book_new(State *st, const char *id, const char *title,
@@ -218,6 +223,8 @@ int cmd_doctor(State *st, int argc, char **argv);
 int cmd_review(State *st, int argc, char **argv);
 int cmd_cards(State *st, int argc, char **argv);
 int cmd_edit(State *st, int argc, char **argv);
+int cmd_tags(State *st, int argc, char **argv);
+int book_has_tag(Book *bk, const char *tag);
 
 /* SRS (spaced review). Cards are reviewable once their chapter is sealed.
  * grade: 0 again · 1 hard · 2 good · 3 easy. */
