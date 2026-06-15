@@ -1,10 +1,4 @@
 #!/usr/bin/env bash
-# Seed a KHATM_DIR poised one seal away from a khatma, with a couple of books
-# already on the shelf, so a single `khatm done <last-chapter>` plays the full
-# reveal (seal -> khatma bloom -> shelf). Sourced by assets/demo/demo.tape.
-#
-#   KHATM_BIN  the khatm binary to drive (default: ./khatm)
-#   KHATM_DIR  data dir to populate     (export a fresh mktemp -d first)
 set -e
 K="${KHATM_BIN:-./khatm}"
 

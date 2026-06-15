@@ -14,7 +14,7 @@ Finish a whole book and that's a khatma, it goes on your shelf.
 
 ## Preview
 
-![sealing the last chapter of a book — the khatma](assets/demo.gif)
+![sealing the last chapter of a book, the khatma](assets/demo.gif)
 
 <sub>Reproducible: `vhs assets/demo/demo.tape` re-records this GIF (see
 [`assets/demo/`](assets/demo)).</sub>
@@ -35,10 +35,9 @@ make test       # smoke suite
 make install    # /usr/local/bin + man page (PREFIX=~/.local for per-user)
 ```
 
-Shell completions live in [`completions/`](completions) (bash, zsh, fish) —
-source the one for your shell, or drop it in the usual place
-(`/etc/bash_completion.d/`, your `$fpath`, `~/.config/fish/completions/`).
-`man khatm` works after `make install`.
+Shell completions are in [`completions/`](completions) (bash, zsh, fish).
+Source the one for your shell, or drop it in the usual place. `man khatm`
+works after `make install`.
 
 Windows, native (MSYS2 UCRT64 or any MinGW-w64 gcc): same thing with
 `make CC=gcc`.
@@ -67,9 +66,9 @@ everything manually in the terminal is hell...
 ./khatm done ostep/1            # seal the chapter (plays the ceremony)
 ```
 
-Sealing plays a short seal-stamp ceremony; the last chapter of a book blooms
-into the khatma and slides onto your shelf. `KHATM_ANIM=0` turns it off, and
-`KHATM_ROMAN=1` swaps the Arabic mark for a roman one if your font mangles it.
+Sealing plays a short ceremony; the last chapter of a book blooms into the
+khatma and slides onto your shelf. `KHATM_ANIM=0` turns it off, `KHATM_ROMAN=1`
+uses a roman mark if your font mangles the Arabic.
 
 ## Syllabus format
 
@@ -105,17 +104,17 @@ meta: deadline=2026-08-30 pages=650 tags=os,systems
 ## Spaced review
 
 Drop `? front :: back` lines under any chapter and they become flashcards.
-A card unlocks for review only once you **seal its chapter** — you revise
-what you've actually finished. Reviews are scheduled with SM-2.
+A card unlocks for review only once you seal its chapter, so you revise what
+you've actually finished. Reviews are scheduled with SM-2.
 
 ```sh
 khatm review           # grade due cards: [a]gain [h]ard [g]ood [e]asy
 khatm cards            # every card and when it next falls due
 ```
 
-The schedule lives entirely in the append-only log (`review` events keyed by
-a hash of the card front), so the `.md` is never rewritten — reorder or
-re-indent cards freely and their history follows.
+The schedule lives in the append-only log (`review` events keyed by a hash of
+the card front), so the `.md` is never rewritten; reorder or re-indent cards
+freely and their history follows.
 
 Everything khatm writes goes to one append-only log, `<root>/log.txt`.
 State is rebuilt from plain text on every load, so grep it, back it up,
@@ -124,16 +123,16 @@ sync it with git, whatever.
 ## Pace and deadlines
 
 `khatm pace` shows each book's burndown and ETA at your real 4-week pace. Give
-it more than one deadline and it schedules them all against a *single* pace,
-soonest first, and tells you which deadlines you'll actually miss — because you
-only have one you. Honest by default; no per-book wishful thinking.
+it more than one deadline and it schedules them all against one pace, soonest
+first, and tells you which deadlines you'll actually miss. Honest by default,
+no per-book wishful thinking.
 
 ## Hooks
 
 Drop an executable at `<root>/hooks/post-seal`, `post-khatma`, or `post-goal`
 and khatm runs it on that event (git-hook style, POSIX only). Data arrives in
-the environment — `KHATM_EVENT`, `KHATM_ROOT`, `KHATM_BOOK`, and for chapter
-events `KHATM_REF` / `KHATM_CHAPTER` — so there is no shell to escape.
+the environment (`KHATM_EVENT`, `KHATM_ROOT`, `KHATM_BOOK`, and for chapter
+events `KHATM_REF` / `KHATM_CHAPTER`), so there is no shell to escape.
 
 ```sh
 #!/bin/sh

@@ -916,7 +916,7 @@ int cmd_pace(State *st, int argc, char **argv) {
                 }
             }
             if (late)
-                printf("   %syou can't keep every deadline at this pace — "
+                printf("   %syou can't keep every deadline at this pace   "
                        "drop one or speed up%s\n", CYELLOW, CRESET);
         }
     }

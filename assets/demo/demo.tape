@@ -1,12 +1,3 @@
-# khatm — the seal ceremony. The launch GIF.
-#
-# Record it (from the repo root, after `make`):
-#     go install github.com/charmbracelet/vhs@latest   # or: brew install vhs
-#     vhs assets/demo/demo.tape                         # writes assets/demo.gif
-#
-# vhs drives a real terminal, so the animation is captured exactly as a user
-# sees it. The Hide/Show block seeds a throwaway data dir off-camera.
-
 Output assets/demo.gif
 
 Set Shell bash

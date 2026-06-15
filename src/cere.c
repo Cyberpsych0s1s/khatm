@@ -209,7 +209,7 @@ void cere_play(State *st, Ref r, int book_complete, int own_screen) {
     {
         Chapter *ch = &st->books[r.book].chs[r.ch];
         char cap[160];
-        snprintf(cap, sizeof cap, "✦ sealed — %.90s", ch->title);
+        snprintf(cap, sizeof cap, "✦ sealed   %.90s", ch->title);
         center_at(cy + 9, w, CL_SAGE, cap);
     }
     if (!book_complete) { STEP(950); goto done; }
